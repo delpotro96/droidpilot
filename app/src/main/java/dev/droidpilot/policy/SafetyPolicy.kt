@@ -67,9 +67,16 @@ class SafetyPolicy(
     // The label and the resource id are judged separately. They are different
     // kinds of string, and joining them made the denominator of the coverage
     // test grow with how descriptive the id was - the clearer the evidence, the
-    // more certainly the rule was skipped
-    private fun matches(element: UiElement, keywords: List<String>): Boolean =
-        matchesLabel(element.label, keywords) || matchesId(element.idName, keywords)
+    // more certainly the rule was skipped.
+    //
+    // What the element says wins. The id is only consulted when the element
+    // says nothing, which is the case it exists for: an icon with no
+    // contentDescription. Consulting it alongside a label turns a row in a
+    // payment history into a checkout screen
+    private fun matches(element: UiElement, keywords: List<String>): Boolean {
+        if (element.label != null) return matchesLabel(element.label, keywords)
+        return element.clickable && matchesId(element.idName, keywords)
+    }
 
     // A control is mostly its verb. Prose that mentions the verb is not a
     // control, and length alone cannot separate "Proceed to checkout" from a
