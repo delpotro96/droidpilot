@@ -20,7 +20,7 @@ everything has to work with none of them registered.
 | Stage | Scope | State |
 |---|---|---|
 | 1 | Observer and serializer | written, not verified on a device |
-| 2 | Executor and policy | not started |
+| 2 | Executor and policy | written, not verified on a device |
 | 3 | Trajectory record and replay | not started |
 | 4 | Planner (LLM) | not started |
 | 5 | Shortcut tools | not started |
