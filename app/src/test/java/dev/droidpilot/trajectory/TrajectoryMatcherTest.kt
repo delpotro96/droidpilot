@@ -83,6 +83,23 @@ class TrajectoryMatcherTest {
     }
 
     @Test
+    fun `a recorded label never resolves to a different label`() {
+        val ref = ElementRef("Cancel", Role.BUTTON, 0, 0, 100, 50)
+        // Something else took the exact spot the Cancel button used to occupy
+        val live = screen(elements = listOf(element(0, "Delete", left = 0, top = 0, right = 100, bottom = 50)))
+
+        assertNull(TrajectoryMatcher.resolve(ref, live))
+    }
+
+    @Test
+    fun `an unlabelled reference never resolves to a labelled element`() {
+        val ref = ElementRef(null, Role.BUTTON, 0, 0, 100, 50)
+        val live = screen(elements = listOf(element(0, "Delete", left = 0, top = 0, right = 100, bottom = 50)))
+
+        assertNull(TrajectoryMatcher.resolve(ref, live))
+    }
+
+    @Test
     fun `a recorded tap becomes a tap on the current element id`() {
         val recorded = RecordedAction.Tap(ElementRef("Send", Role.BUTTON, 0, 0, 100, 50))
         val live = screen(elements = listOf(element(0, "Other"), element(1, "Send")))
