@@ -1,0 +1,51 @@
+package dev.droidpilot.core.model
+
+import android.graphics.Rect
+
+// One observed frame of the screen
+data class ScreenState(
+    val packageName: String,
+    val activity: String?,
+    val elements: List<UiElement>,
+    val screenHash: String,
+    val screenshot: ByteArray? = null,
+    val capturedAt: Long = System.currentTimeMillis()
+) {
+    // Whether the text listing alone is enough to decide the next action
+    val isTextUsable: Boolean
+        get() = elements.count { it.clickable } >= MIN_CLICKABLE &&
+                elements.none { it.role == Role.SURFACE }
+
+    // The generated equals would compare ByteArray by reference
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ScreenState) return false
+        return screenHash == other.screenHash && packageName == other.packageName
+    }
+
+    override fun hashCode(): Int = 31 * screenHash.hashCode() + packageName.hashCode()
+
+    companion object {
+        const val MIN_CLICKABLE = 3
+    }
+}
+
+// A single element the planner can refer to by id
+data class UiElement(
+    val id: Int,
+    val role: Role,
+    val text: String?,
+    val desc: String?,
+    val bounds: Rect,
+    val clickable: Boolean,
+    val scrollable: Boolean,
+    val editable: Boolean
+) {
+    // What the element actually shows on screen
+    val label: String?
+        get() = text?.takeIf { it.isNotBlank() } ?: desc?.takeIf { it.isNotBlank() }
+}
+
+enum class Role {
+    BUTTON, TEXT, INPUT, IMAGE, LIST, CHECKBOX, SWITCH, SURFACE, WEBVIEW, OTHER
+}

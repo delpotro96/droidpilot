@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DroidPilot</string>
+    <string name="service_name">DroidPilot screen reader</string>
+    <string name="service_description">Reads screen content so the agent can operate apps on your behalf. Nothing leaves the device.</string>
+    <string name="hint_enable_service">Enable the accessibility service, then press the button below.</string>
+    <string name="action_open_settings">Open accessibility settings</string>
+    <string name="action_dump">Dump screen in 5s</string>
+    <string name="error_service_off">Accessibility service is not running.</string>
+</resources>
