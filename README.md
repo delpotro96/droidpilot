@@ -21,7 +21,7 @@ everything has to work with none of them registered.
 |---|---|---|
 | 1 | Observer and serializer | written, not verified on a device |
 | 2 | Executor and policy | written, not verified on a device |
-| 3 | Trajectory record and replay | not started |
+| 3 | Trajectory record and replay | written, 36 unit tests green |
 | 4 | Planner (LLM) | not started |
 | 5 | Shortcut tools | not started |
 
@@ -48,8 +48,12 @@ was added in API 30.
 
 ```
 ./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+The unit tests run on the JVM through Robolectric, so a device is only
+needed to exercise the accessibility service itself.
 
 ## Run
 

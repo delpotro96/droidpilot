@@ -5,6 +5,7 @@ coreKtx = "1.15.0"
 appcompat = "1.7.0"
 lifecycle = "2.8.7"
 coroutines = "1.9.0"
+serialization = "1.7.3"
 junit = "4.13.2"
 robolectric = "4.14.1"
 androidxTest = "1.6.1"
@@ -16,6 +17,7 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 androidx-lifecycle-service = { group = "androidx.lifecycle", name = "lifecycle-service", version.ref = "lifecycle" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTest" }
@@ -24,3 +26,4 @@ androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
