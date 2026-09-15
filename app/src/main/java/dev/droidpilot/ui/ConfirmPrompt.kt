@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import dev.droidpilot.R
 import dev.droidpilot.agent.AgentRunner
@@ -22,6 +23,10 @@ object ConfirmPrompt {
     private const val NOTIFICATION_ID = 1
     private const val ACTION_ANSWER = "dev.droidpilot.CONFIRM_ANSWER"
     private const val EXTRA_APPROVED = "approved"
+
+    // Long enough for the user to notice, short enough that a dead process
+    // does not leave the question hanging on screen forever
+    private const val TIMEOUT_MILLIS = 10 * 60 * 1000L
 
     private var receiver: BroadcastReceiver? = null
 
@@ -47,6 +52,17 @@ object ConfirmPrompt {
         receiver = handler
     }
 
+    // A disabled channel swallows the notification, and the agent would then
+    // wait on an answer that can never arrive
+    fun canReachUser(context: Context): Boolean {
+        val app = context.applicationContext
+        if (!NotificationManagerCompat.from(app).areNotificationsEnabled()) return false
+
+        createChannel(app)
+        val channel = manager(app).getNotificationChannel(CHANNEL_ID)
+        return channel == null || channel.importance != NotificationManager.IMPORTANCE_NONE
+    }
+
     fun show(context: Context, reason: String) {
         val app = context.applicationContext
         register(app)
@@ -58,8 +74,11 @@ object ConfirmPrompt {
             .setStyle(NotificationCompat.BigTextStyle().bigText(reason))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setOngoing(true)
-            .setAutoCancel(false)
+            // Not ongoing. A process death between posting this and answering
+            // it would otherwise strand a notification the user cannot swipe
+            // away, with both actions wired to a receiver that no longer exists
+            .setAutoCancel(true)
+            .setTimeoutAfter(TIMEOUT_MILLIS)
             .addAction(0, app.getString(R.string.confirm_allow), answerIntent(app, true))
             .addAction(0, app.getString(R.string.confirm_deny), answerIntent(app, false))
             .build()

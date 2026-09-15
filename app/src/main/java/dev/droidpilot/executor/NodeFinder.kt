@@ -39,6 +39,30 @@ object NodeFinder {
         return label == target.label
     }
 
+    // Whatever now occupies the recorded rectangle, label or not. Used to tell
+    // an empty game surface apart from a screen that has re-laid out under us
+    fun occupantAt(root: AccessibilityNodeInfo?, bounds: Rect): AccessibilityNodeInfo? {
+        if (root == null) return null
+        return findByBounds(root, bounds, 0)
+    }
+
+    private fun findByBounds(
+        node: AccessibilityNodeInfo,
+        bounds: Rect,
+        depth: Int
+    ): AccessibilityNodeInfo? {
+        if (depth > MAX_DEPTH) return null
+        if (node.isVisibleToUser) {
+            val own = Rect().also { node.getBoundsInScreen(it) }
+            if (own == bounds) return node
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            findByBounds(child, bounds, depth + 1)?.let { return it }
+        }
+        return null
+    }
+
     // The visible label is often a child of the node that actually handles the
     // click. Climbing without limit press a whole list row when the target was
     // an icon inside it, so the ancestor has to stay close to the size of what

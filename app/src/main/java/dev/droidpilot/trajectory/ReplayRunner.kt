@@ -17,7 +17,11 @@ class ReplayRunner(
 ) {
 
     sealed interface Outcome {
-        data object Completed : Outcome
+        // Every step ran. Verified says whether the screen actually moved
+        // afterwards - an unverified run is not a failure, but it is not
+        // evidence the path works either
+        data class Completed(val verified: Boolean) : Outcome
+
         data class Diverged(val atStep: Int, val reason: String) : Outcome
         data class Blocked(val atStep: Int, val reason: String) : Outcome
     }
@@ -58,22 +62,30 @@ class ReplayRunner(
             delay(settleMillis)
         }
 
-        // Replaying every step is not proof the goal was met, but a screen that
-        // is byte for byte what it was before the last action is proof that the
-        // action did nothing. Without this, a blind coordinate tap that misses
-        // is recorded as a success and the failing path gains priority
-        val ending = observe()
-        if (lastHash != null && ending.screenHash == lastHash) {
-            return Outcome.Diverged(
-                trajectory.steps.lastIndex,
-                "screen unchanged after the final step"
-            )
-        }
+        // Replaying every step is not proof the goal was met, and a screen that
+        // has not moved is weak evidence the last action missed. It cannot be
+        // treated as a divergence: every step has already run on the device, so
+        // handing the goal back to the planner from here risks sending twice.
+        //
+        // Waiting does not move the screen by design, and a toggle or a toast
+        // does not show up in the tree at all, so an unmoved screen is reported
+        // rather than acted on
+        val moved = moved(lastHash)
+        return Outcome.Completed(verified = moved)
+    }
 
-        return Outcome.Completed
+    // A transition routinely outlasts one settle interval, so an unmoved
+    // screen is given a second look before it is reported as unmoved
+    private suspend fun moved(lastHash: String?): Boolean {
+        if (lastHash == null) return true
+        if (observe().screenHash != lastHash) return true
+
+        delay(settleMillis * SETTLE_RETRIES)
+        return observe().screenHash != lastHash
     }
 
     private companion object {
         const val DEFAULT_SETTLE_MILLIS = 400L
+        const val SETTLE_RETRIES = 3
     }
 }

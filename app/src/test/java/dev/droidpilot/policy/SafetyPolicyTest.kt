@@ -34,7 +34,7 @@ class SafetyPolicyTest {
     }
 
     @Test
-    fun `every action on a checkout screen is denied, not just the pay button`() {
+    fun `every press on a checkout screen is denied, not just the pay button`() {
         val state = screen(
             elements = listOf(
                 element(0, "뒤로"),
@@ -43,7 +43,44 @@ class SafetyPolicyTest {
         )
 
         assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
-        assertTrue(policy.check(AgentAction.Back, state) is Verdict.Deny)
+        assertTrue(policy.check(AgentAction.Tap(1), state) is Verdict.Deny)
+    }
+
+    @Test
+    fun `leaving a checkout screen is allowed, or the agent is stranded on it`() {
+        val state = screen(elements = listOf(element(0, "결제하기")))
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Back, state))
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Home, state))
+    }
+
+    @Test
+    fun `a labelled button with a matching resource id is still caught`() {
+        // Joining label and id into one string used to sink the coverage ratio
+        // below the threshold, and the clearer the id the more certainly
+        val state = screen(
+            elements = listOf(element(0, "Send", viewId = "com.example.app:id/send_message_button"))
+        )
+
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
+    }
+
+    @Test
+    fun `a checkout button with a matching resource id is still caught`() {
+        val state = screen(
+            elements = listOf(element(0, "Checkout", viewId = "com.shop:id/checkout_button"))
+        )
+
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
+    }
+
+    @Test
+    fun `a resource id that merely contains a keyword is not a match`() {
+        val state = screen(
+            elements = listOf(element(0, "12 items", viewId = "com.app:id/deleted_items_count"))
+        )
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(0), state))
     }
 
     @Test

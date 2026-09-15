@@ -60,15 +60,17 @@ class ReplayRunnerTest {
     fun `a matching path runs and completes`() = runTest {
         val outcome = runner(listOf(before, after)).run(path("Open", listOf("Open")))
 
-        assertEquals(ReplayRunner.Outcome.Completed, outcome)
+        assertEquals(ReplayRunner.Outcome.Completed(verified = true), outcome)
         assertEquals(listOf(AgentAction.Tap(0)), performed)
     }
 
     @Test
-    fun `a screen that did not move is a divergence, not a success`() = runTest {
+    fun `a screen that did not move completes unverified rather than replanning`() = runTest {
+        // Every step has already run on the device. Handing the goal back to
+        // the planner from here would risk repeating the final action
         val outcome = runner(listOf(before)).run(path("Open", listOf("Open")))
 
-        assertTrue(outcome is ReplayRunner.Outcome.Diverged)
+        assertEquals(ReplayRunner.Outcome.Completed(verified = false), outcome)
     }
 
     @Test
@@ -84,7 +86,7 @@ class ReplayRunnerTest {
         val deletable = screen(hash = "before", elements = listOf(element(0, "삭제")))
         val outcome = runner(listOf(deletable, after)).run(path("삭제", listOf("삭제")))
 
-        assertEquals(ReplayRunner.Outcome.Completed, outcome)
+        assertTrue(outcome is ReplayRunner.Outcome.Completed)
         assertEquals(1, asked.size)
         assertEquals(listOf(AgentAction.Tap(0)), performed)
     }

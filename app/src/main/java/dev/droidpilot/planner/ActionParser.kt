@@ -28,7 +28,9 @@ object ActionParser {
             "swipe" -> AgentAction.Swipe(direction(obj.requireString("direction")), obj.int("elementId"))
             "back" -> AgentAction.Back
             "home" -> AgentAction.Home
-            "wait" -> AgentAction.Wait(obj.long("millis") ?: DEFAULT_WAIT_MILLIS)
+            "wait" -> AgentAction.Wait(
+                (obj.long("millis") ?: DEFAULT_WAIT_MILLIS).coerceIn(0L, MAX_WAIT_MILLIS)
+            )
             "ask" -> AgentAction.AskUser(obj.requireString("question"))
             "done" -> AgentAction.Done(obj.requireString("summary"))
             "fail" -> AgentAction.Fail(obj.requireString("reason"))
@@ -83,4 +85,8 @@ object ActionParser {
         string(key) ?: error("missing field: " + key)
 
     private const val DEFAULT_WAIT_MILLIS = 1000L
+
+    // Waiting is for a screen to settle. Anything longer is the planner
+    // stalling, and the step budget counts steps rather than time
+    private const val MAX_WAIT_MILLIS = 15_000L
 }

@@ -22,7 +22,7 @@ class SafetyPolicy(
         }
 
         packageVerdict(state)?.let { return it }
-        screenVerdict(state)?.let { return it }
+        screenVerdict(action, state)?.let { return it }
         return actionVerdict(action, state)
     }
 
@@ -36,55 +36,46 @@ class SafetyPolicy(
         return null
     }
 
-    // On a checkout screen every tap is dangerous, so the whole screen is denied.
+    // On a checkout screen every press is dangerous, so the screen is denied.
     //
-    // Only button-shaped labels count. Matching every string on screen looked
-    // safer but made the agent useless: one chat message saying "결제했어?" was
-    // enough to lock the whole conversation out
-    private fun screenVerdict(state: ScreenState): Verdict? {
-        // Not filtered on clickable. The label of a payment button is very
-        // often a child TextView while the parent handles the press, which is
-        // the same layout the executor climbs for. Requiring clickable here
-        // would miss exactly those screens
-        val hit = state.elements
-            .filter { isControlSized(it) }
-            .firstOrNull { matches(it.identity, PAYMENT_KEYWORDS) }
+    // Not filtered on clickable: the label of a pay button is usually a child
+    // of the view that handles the press, which is the same layout the executor
+    // climbs for
+    private fun screenVerdict(action: AgentAction, state: ScreenState): Verdict? {
+        // Leaving is how the agent gets off a payment screen. Denying the way
+        // out strands it there with nothing it is allowed to do
+        if (action is AgentAction.Back || action is AgentAction.Home) return null
 
-        return hit?.let { Verdict.Deny("looks like a payment screen: " + it.identity) }
+        val hit = state.elements.firstOrNull { matches(it, PAYMENT_KEYWORDS) }
+        return hit?.let { Verdict.Deny("looks like a payment screen: " + it.describe) }
     }
 
     private fun actionVerdict(action: AgentAction, state: ScreenState): Verdict {
+        // Typing the word delete into a field is not the destructive act
         val element = when (action) {
             is AgentAction.Tap -> state.elements.getOrNull(action.elementId)
             is AgentAction.LongPress -> state.elements.getOrNull(action.elementId)
-            is AgentAction.Input -> state.elements.getOrNull(action.elementId)
             else -> null
         } ?: return Verdict.Allow
 
-        // Typing into a field named "delete" is not the destructive act, tapping is
-        if (action is AgentAction.Input) return Verdict.Allow
-
-        if (isControlSized(element) && matches(element.identity, IRREVERSIBLE_KEYWORDS)) {
-            return Verdict.RequireConfirm("irreversible action: " + element.identity)
+        if (matches(element, IRREVERSIBLE_KEYWORDS)) {
+            return Verdict.RequireConfirm("irreversible action: " + element.describe)
         }
         return Verdict.Allow
     }
 
-    // A control carries a short label. Prose that happens to contain the word is
-    // body text, not something the agent is about to press. An element with no
-    // label at all still has a resource id to judge, which is the only handle
-    // an unnamed icon offers
-    private fun isControlSized(element: UiElement): Boolean {
-        val identity = element.identity
-        if (identity.isBlank()) return false
-        return element.label == null || element.label!!.length <= MAX_CONTROL_LABEL
-    }
+    // The label and the resource id are judged separately. They are different
+    // kinds of string, and joining them made the denominator of the coverage
+    // test grow with how descriptive the id was - the clearer the evidence, the
+    // more certainly the rule was skipped
+    private fun matches(element: UiElement, keywords: List<String>): Boolean =
+        matchesLabel(element.label, keywords) || matchesId(element.idName, keywords)
 
-    // Length alone cannot separate "Proceed to checkout" from a chat message of
-    // the same length, so the keyword also has to account for much of the label.
-    // A button is mostly its verb; a sentence that mentions the verb is not
-    private fun matches(label: String?, keywords: List<String>): Boolean {
-        if (label.isNullOrBlank()) return false
+    // A control is mostly its verb. Prose that mentions the verb is not a
+    // control, and length alone cannot separate "Proceed to checkout" from a
+    // chat preview of the same length
+    private fun matchesLabel(label: String?, keywords: List<String>): Boolean {
+        if (label.isNullOrBlank() || label.length > MAX_CONTROL_LABEL) return false
 
         val longest = keywords
             .filter { label.contains(it, ignoreCase = true) }
@@ -94,14 +85,25 @@ class SafetyPolicy(
         return longest.length.toDouble() / label.trim().length >= MIN_KEYWORD_COVERAGE
     }
 
+    // Resource ids are developer-written words joined by separators, so whole
+    // word matching is the right test. delete_button matches, avatar does not,
+    // and deleted_items_count does not become a delete button by containing it
+    private fun matchesId(idName: String?, keywords: List<String>): Boolean {
+        if (idName.isNullOrBlank()) return false
+
+        val words = idName.split(*ID_SEPARATORS).filter { it.isNotBlank() }
+        return words.any { word -> keywords.any { it.equals(word, ignoreCase = true) } }
+    }
+
     companion object {
         // Longer than any button label, shorter than a sentence
         const val MAX_CONTROL_LABEL = 24
 
         // Tuned against real button labels and chat previews of similar length.
-        // Both thresholds are guesses until they have been seen against a real
-        // view tree
+        // Still a guess until it has been seen against a real view tree
         const val MIN_KEYWORD_COVERAGE = 0.4
+
+        private val ID_SEPARATORS = charArrayOf('_', '-', '.')
 
         // Banking apps are blocked wholesale, automation has no business there
         val DEFAULT_BLOCKED_PACKAGES = setOf(
@@ -119,7 +121,7 @@ class SafetyPolicy(
         // Matched against on-screen labels, so the Korean terms stay as-is
         private val PAYMENT_KEYWORDS = listOf(
             "결제", "구매하기", "주문하기", "송금", "이체", "출금", "카드 등록", "간편결제",
-            "payment", "checkout", "purchase", "pay now", "buy now"
+            "payment", "checkout", "purchase", "pay", "buy"
         )
 
         private val IRREVERSIBLE_KEYWORDS = listOf(

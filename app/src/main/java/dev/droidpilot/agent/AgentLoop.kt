@@ -39,26 +39,44 @@ class AgentLoop(
     }
 
     suspend fun run(goal: Goal): Result {
-        replay(goal)?.let { return it }
-        return plan(goal)
+        var partial = false
+        replay(goal) { partial = it }?.let { return it }
+
+        // A replan that starts halfway through a path only ever records the
+        // tail. Saving that would replace a working five step route with a two
+        // step one whose first screen is mid flow, which then never matches
+        // from the start again
+        return plan(goal, mayStore = !partial)
     }
 
     // Returns null when there is nothing to replay or the path no longer fits,
     // which sends the caller on to the planner
-    private suspend fun replay(goal: Goal): Result? {
+    private suspend fun replay(goal: Goal, onPartial: (Boolean) -> Unit): Result? {
         val trajectory = store.findFor(goal.raw) ?: return null
+
+        // The battery floor applies to replay too, and was only being consulted
+        // on the planning path. Checked without an observation, since a fresh
+        // guard has no history for the other rules to act on anyway
+        guardFactory(goal.stepBudget).abortReason()?.let { return Result.Failed(it) }
+
         onProgress("replaying a stored path of " + trajectory.steps.size + " steps")
 
         val outcome = ReplayRunner(executor, policy, observe, confirm, settleMillis).run(trajectory)
         return when (outcome) {
             is ReplayRunner.Outcome.Completed -> {
-                store.recordOutcome(trajectory.id, success = true)
+                // Only a run that visibly moved the screen counts for or
+                // against the path. Scoring an unverified run either way would
+                // retire a working path or promote a failing one
+                if (outcome.verified) store.recordOutcome(trajectory.id, success = true)
+                else onProgress("replayed, but the screen did not visibly move")
+
                 Result.Done("replayed a stored path", replayed = true)
             }
 
             is ReplayRunner.Outcome.Diverged -> {
                 store.recordOutcome(trajectory.id, success = false)
                 onProgress("replay diverged at step " + outcome.atStep + ", replanning")
+                onPartial(outcome.atStep > 0)
                 null
             }
 
@@ -68,11 +86,12 @@ class AgentLoop(
         }
     }
 
-    private suspend fun plan(goal: Goal): Result {
+    private suspend fun plan(goal: Goal, mayStore: Boolean = true): Result {
         val guard = guardFactory(goal.stepBudget)
         val history = mutableListOf<Step>()
         val recorder = TrajectoryRecorder(goal.raw)
         var previousAction: AgentAction? = null
+        var restarts = 0
 
         while (true) {
             val state = observe()
@@ -85,7 +104,7 @@ class AgentLoop(
 
             when (action) {
                 is AgentAction.Done -> {
-                    recorder.build()?.let { store.save(it) }
+                    if (mayStore) recorder.build()?.let { store.save(it) }
                     return Result.Done(action.summary, replayed = false)
                 }
 
@@ -102,13 +121,22 @@ class AgentLoop(
             }
 
             // The planner round trip can take minutes on a CPU bound model.
-            // Acting on the screen it saw would tap coordinates the policy
-            // never examined, so a moved screen sends us round again
+            // Acting on the screen it saw would press coordinates the policy
+            // never examined, so a moved screen sends us round again.
+            //
+            // Compared on structure, not on every label: a clock or an unread
+            // badge ticking over is not the screen moving, and treating it as
+            // such meant the agent never acted at all on a chat list
             val current = observe()
-            if (current.screenHash != state.screenHash) {
+            if (current.structureHash != state.structureHash) {
+                restarts++
+                if (restarts > MAX_RESTARTS) {
+                    return Result.Failed("the screen kept changing faster than it could be acted on")
+                }
                 onProgress("screen moved while planning, re-observing")
                 continue
             }
+            restarts = 0
 
             val outcome = executor.perform(action, current)
             // A step that failed still belongs in the history, otherwise the
@@ -127,5 +155,9 @@ class AgentLoop(
 
     private companion object {
         const val DEFAULT_SETTLE_MILLIS = 400L
+
+        // A screen that will not hold still for one round trip is not one the
+        // agent can operate, and spinning on it burns the whole budget silently
+        const val MAX_RESTARTS = 3
     }
 }

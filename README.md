@@ -99,7 +99,7 @@ log and any confirmation prompt are waiting when you come back.
 
 | Risk | Mitigation |
 |---|---|
-| Mis-tapping a payment button | Policy denies every action on a checkout screen |
-| Sending a message to the wrong person | Confirmation required before send |
+| Mis-tapping a payment button | Policy denies every press on a checkout screen. Leaving one is still allowed, or the agent would be stranded there |
+| Sending a message to the wrong person | Confirmation required before send, asked as a notification because the app is not in the foreground while the agent works. With notifications off the agent refuses rather than guessing |
 | Infinite loop, drained battery | Abort on 3 repeats of the same screen hash, 40 step budget, 20% battery floor |
 | Screen contents leaking | Banking apps are refused outright. `SafetyPolicy` also takes an allow list, which nothing populates yet |

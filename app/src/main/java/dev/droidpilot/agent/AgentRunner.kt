@@ -111,8 +111,11 @@ object AgentRunner {
     }
 
     fun cancel(context: Context) {
-        // A parked question would otherwise keep the loop waiting forever
-        pendingConfirm.getAndSet(null)?.complete(false)
+        // Completing the question with a no would unwind the loop through the
+        // decline path and write a refusal the user never gave into the log,
+        // which is the only record of what the agent decided. Cancelling the
+        // wait is not an answer
+        pendingConfirm.getAndSet(null)?.cancel()
         ConfirmPrompt.dismiss(context)
         job.getAndSet(null)?.cancel()
         finish("cancelled")
@@ -123,6 +126,13 @@ object AgentRunner {
     }
 
     private suspend fun askUser(context: Context, goal: String, reason: String): Boolean {
+        // Without a way to reach the user the run would park indefinitely with
+        // nothing on screen to explain it. Refusing is the documented behaviour
+        if (!ConfirmPrompt.canReachUser(context)) {
+            note(goal, "notifications are off, refusing instead of guessing: " + reason)
+            return false
+        }
+
         val deferred = CompletableDeferred<Boolean>()
         pendingConfirm.set(deferred)
         _state.update { State.AwaitingConfirm(goal, it.log, reason) }

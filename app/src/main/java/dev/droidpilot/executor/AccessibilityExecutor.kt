@@ -61,14 +61,32 @@ class AccessibilityExecutor(
 
         if (clickable?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
 
-        // The node is gone or refuses the click action, so hit the coordinates
+        requireCoordinatesStillFree(target)
         gestureTap(target.bounds, DURATION_TAP)
     }
 
     private suspend fun longPress(target: UiElement) {
         val node = NodeFinder.find(service.rootInActiveWindow, target)
         if (node?.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) == true) return
+
+        requireCoordinatesStillFree(target)
         gestureTap(target.bounds, DURATION_LONG_PRESS)
+    }
+
+    // Falling back to coordinates is what makes a game screen operable at all,
+    // but the same fallback pressed whatever had re-laid out into the old
+    // rectangle. The node lookup failing is precisely the signal that the
+    // screen moved, so before touching the pixels: if something else is sitting
+    // there now, refuse. Only genuinely empty space is fair game
+    private fun requireCoordinatesStillFree(target: UiElement) {
+        val occupant = NodeFinder.occupantAt(service.rootInActiveWindow, target.bounds) ?: return
+
+        val label = occupant.text?.toString()?.takeIf { it.isNotBlank() }
+            ?: occupant.contentDescription?.toString()?.takeIf { it.isNotBlank() }
+
+        check(label == target.label) {
+            "another element took those coordinates: " + (label ?: "unlabelled")
+        }
     }
 
     private fun input(target: UiElement, text: String) {

@@ -54,9 +54,16 @@ data class UiElement(
     val label: String?
         get() = text?.takeIf { it.isNotBlank() } ?: desc?.takeIf { it.isNotBlank() }
 
-    // Everything a guardrail can read about this element, label or not
-    val identity: String
-        get() = listOfNotNull(label, viewId?.substringAfterLast("/")).joinToString(" ")
+    // The developer name without its package, such as delete_button. Judged
+    // separately from the label: joining the two into one string made the
+    // denominator of any coverage test grow with how descriptive the id was,
+    // which let the clearest cases through
+    val idName: String?
+        get() = viewId?.substringAfterLast("/")?.takeIf { it.isNotBlank() }
+
+    // What a guardrail reports when it refuses
+    val describe: String
+        get() = label ?: idName ?: ("element " + id)
 }
 
 enum class Role {

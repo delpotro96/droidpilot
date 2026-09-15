@@ -134,18 +134,23 @@ class AgentLoopTest {
     }
 
     @Test
-    fun `a replay that leaves the screen untouched is treated as divergence`() = runTest {
+    fun `a replay whose screen did not move is not handed back to the planner`() = runTest {
         val store = newStore()
         store.save(storedTap("open settings", "Settings", listOf("Settings", "Profile", "Help")))
 
-        // Same screen before and after, which is what a missed tap looks like
-        val (agent, _) = loop(
-            scriptedPlanner(AgentAction.Tap(1), AgentAction.Done("replanned")),
-            store
-        )
+        val refusingPlanner = object : Planner {
+            override suspend fun next(goal: Goal, state: ScreenState, history: List<Step>): AgentAction =
+                throw AssertionError("every step already ran, replanning risks repeating it")
+        }
+
+        val (agent, _) = loop(refusingPlanner, store)
         val result = agent.run(Goal("open settings"))
 
-        assertEquals(AgentLoop.Result.Done("replanned", replayed = false), result)
+        assertTrue(result is AgentLoop.Result.Done)
+        assertTrue((result as AgentLoop.Result.Done).replayed)
+        // Unverified, so the path neither gains nor loses standing
+        assertEquals(0, store.all().first().successCount)
+        assertEquals(0, store.all().first().failureCount)
     }
 
     @Test
