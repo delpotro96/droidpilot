@@ -2,7 +2,6 @@ package dev.droidpilot.core.model
 
 data class Goal(
     val raw: String,
-    val targetPackage: String? = null,
     val successHint: String? = null,
     val stepBudget: Int = DEFAULT_STEP_BUDGET
 ) {

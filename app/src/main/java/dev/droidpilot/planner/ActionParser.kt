@@ -25,7 +25,7 @@ object ActionParser {
             "tap" -> AgentAction.Tap(obj.requireInt("elementId"))
             "longPress" -> AgentAction.LongPress(obj.requireInt("elementId"))
             "input" -> AgentAction.Input(obj.requireInt("elementId"), obj.requireString("text"))
-            "swipe" -> AgentAction.Swipe(direction(obj.requireString("direction")))
+            "swipe" -> AgentAction.Swipe(direction(obj.requireString("direction")), obj.int("elementId"))
             "back" -> AgentAction.Back
             "home" -> AgentAction.Home
             "wait" -> AgentAction.Wait(obj.long("millis") ?: DEFAULT_WAIT_MILLIS)
@@ -74,6 +74,7 @@ object ActionParser {
 
     private fun JsonObject.string(key: String) = this[key]?.jsonPrimitive?.contentOrNull
     private fun JsonObject.long(key: String) = this[key]?.jsonPrimitive?.longOrNull
+    private fun JsonObject.int(key: String) = this[key]?.jsonPrimitive?.intOrNull
 
     private fun JsonObject.requireInt(key: String): Int =
         this[key]?.jsonPrimitive?.intOrNull ?: error("missing or non-numeric field: " + key)

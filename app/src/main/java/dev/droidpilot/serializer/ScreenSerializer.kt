@@ -40,13 +40,15 @@ object ScreenSerializer {
         // Ids are assigned on the way in, so the index is the collection order
 
         val bounds = Rect().also { node.getBoundsInScreen(it) }
-        if (bounds.width() <= 0 || bounds.height() <= 0) return
+        // A wrapper can report no area of its own while laying out children
+        // that are perfectly visible, so this skips the node, not the subtree
+        val hasArea = bounds.width() > 0 && bounds.height() > 0
 
         val role = roleOf(node)
         val text = node.text?.toString()
         val desc = node.contentDescription?.toString()
 
-        if (isWorthKeeping(node, role, text, desc)) {
+        if (hasArea && isWorthKeeping(node, role, text, desc)) {
             out += UiElement(
                 id = out.size,
                 role = role,

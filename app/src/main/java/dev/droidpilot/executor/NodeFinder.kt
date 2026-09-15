@@ -39,18 +39,35 @@ object NodeFinder {
         return label == target.label
     }
 
-    // The visible label is often a child of the node that actually handles the click
+    // The visible label is often a child of the node that actually handles the
+    // click. Climbing without limit press a whole list row when the target was
+    // an icon inside it, so the ancestor has to stay close to the size of what
+    // was aimed at
     fun clickableSelfOrAncestor(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        var current: AccessibilityNodeInfo? = node
+        if (node.isClickable) return node
+
+        val target = Rect().also { node.getBoundsInScreen(it) }
+        val limit = area(target) * MAX_ANCESTOR_AREA_RATIO
+
+        var current: AccessibilityNodeInfo? = node.parent
         var hops = 0
         while (current != null && hops < MAX_ANCESTOR_HOPS) {
-            if (current.isClickable) return current
+            if (current.isClickable) {
+                val bounds = Rect().also { current!!.getBoundsInScreen(it) }
+                return if (area(bounds) <= limit) current else null
+            }
             current = current.parent
             hops++
         }
         return null
     }
 
+    private fun area(bounds: Rect): Long =
+        bounds.width().toLong() * bounds.height().toLong()
+
     private const val MAX_DEPTH = 40
     private const val MAX_ANCESTOR_HOPS = 5
+
+    // A tappable wrapper is a little bigger than its icon, not ten times bigger
+    private const val MAX_ANCESTOR_AREA_RATIO = 6
 }

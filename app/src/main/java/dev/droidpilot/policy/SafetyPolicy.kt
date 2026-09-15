@@ -13,7 +13,8 @@ class SafetyPolicy(
 ) : Policy {
 
     override fun check(action: AgentAction, state: ScreenState): Verdict {
-        // Terminal actions never touch the screen
+        // Nothing here presses anything. Wait does reach the executor, but it
+        // only sleeps
         when (action) {
             is AgentAction.AskUser, is AgentAction.Done,
             is AgentAction.Fail, is AgentAction.Wait -> return Verdict.Allow

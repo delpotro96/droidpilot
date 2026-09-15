@@ -36,6 +36,22 @@ class ActionParserTest {
     }
 
     @Test
+    fun `a swipe can name the list it applies to`() {
+        assertEquals(
+            AgentAction.Swipe(Direction.DOWN, 4),
+            ActionParser.parse("""{"action":"swipe","direction":"down","elementId":4}""").getOrThrow()
+        )
+    }
+
+    @Test
+    fun `a swipe without a target still parses`() {
+        assertEquals(
+            AgentAction.Swipe(Direction.UP, null),
+            ActionParser.parse("""{"action":"swipe","direction":"up"}""").getOrThrow()
+        )
+    }
+
+    @Test
     fun `actions without arguments parse`() {
         assertEquals(AgentAction.Back, ActionParser.parse("""{"action":"back"}""").getOrThrow())
         assertEquals(AgentAction.Home, ActionParser.parse("""{"action":"home"}""").getOrThrow())

@@ -16,9 +16,12 @@ data class Trajectory(
     val successCount: Int = 0,
     val failureCount: Int = 0
 ) {
-    // A path that keeps failing is worse than replanning from scratch
+    // A path that keeps failing is worse than replanning from scratch, but a
+    // single divergence is usually a popup rather than a bad path. Judging on
+    // the net record lets a good path survive one bad day, and made the limit
+    // reachable at all - the old rule retired a path on its first failure
     val isTrustworthy: Boolean
-        get() = failureCount < MAX_FAILURES && successCount >= failureCount
+        get() = failureCount - successCount < MAX_FAILURES
 
     companion object {
         const val MAX_FAILURES = 3

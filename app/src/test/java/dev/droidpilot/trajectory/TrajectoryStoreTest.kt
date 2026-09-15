@@ -66,6 +66,17 @@ class TrajectoryStoreTest {
     }
 
     @Test
+    fun `a single divergence does not retire a path`() = runTest {
+        val (store, _) = store()
+        store.save(trajectory("a", "send a message"))
+
+        store.recordOutcome("a", success = false)
+
+        // One popup is not evidence the path is wrong
+        assertNotNull(store.findFor("send a message"))
+    }
+
+    @Test
     fun `a path that keeps failing stops being offered`() = runTest {
         val (store, _) = store()
         store.save(trajectory("a", "send a message"))
@@ -75,6 +86,28 @@ class TrajectoryStoreTest {
         assertNull(store.findFor("send a message"))
         // It is still on disk, only untrusted
         assertEquals(1, store.all().size)
+    }
+
+    @Test
+    fun `a proven path survives the odd failure`() = runTest {
+        val (store, _) = store()
+        store.save(trajectory("a", "send a message"))
+
+        repeat(5) { store.recordOutcome("a", success = true) }
+        repeat(3) { store.recordOutcome("a", success = false) }
+
+        assertNotNull(store.findFor("send a message"))
+    }
+
+    @Test
+    fun `an unchanged path keeps its record when saved again`() = runTest {
+        val (store, _) = store()
+        store.save(trajectory("a", "send a message"))
+        repeat(4) { store.recordOutcome("a", success = true) }
+
+        store.save(trajectory("b", "send a message"))
+
+        assertEquals(4, store.findFor("send a message")?.successCount)
     }
 
     @Test
