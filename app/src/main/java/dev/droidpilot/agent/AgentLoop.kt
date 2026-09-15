@@ -49,7 +49,7 @@ class AgentLoop(
         val trajectory = store.findFor(goal.raw) ?: return null
         onProgress("replaying a stored path of " + trajectory.steps.size + " steps")
 
-        val outcome = ReplayRunner(executor, policy, observe, settleMillis).run(trajectory)
+        val outcome = ReplayRunner(executor, policy, observe, confirm, settleMillis).run(trajectory)
         return when (outcome) {
             is ReplayRunner.Outcome.Completed -> {
                 store.recordOutcome(trajectory.id, success = true)
@@ -100,7 +100,16 @@ class AgentLoop(
                 Verdict.Allow -> Unit
             }
 
-            val outcome = executor.perform(action, state)
+            // The planner round trip can take minutes on a CPU bound model.
+            // Acting on the screen it saw would tap coordinates the policy
+            // never examined, so a moved screen sends us round again
+            val current = observe()
+            if (current.screenHash != state.screenHash) {
+                onProgress("screen moved while planning, re-observing")
+                continue
+            }
+
+            val outcome = executor.perform(action, current)
             // A step that failed still belongs in the history, otherwise the
             // planner repeats it forever
             history += Step(
@@ -108,7 +117,7 @@ class AgentLoop(
                 beforeHash = state.screenHash,
                 succeeded = outcome.isSuccess
             )
-            if (outcome.isSuccess) recorder.record(action, state)
+            if (outcome.isSuccess) recorder.record(action, current)
 
             delay(settleMillis)
         }

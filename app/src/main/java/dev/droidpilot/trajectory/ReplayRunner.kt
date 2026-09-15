@@ -12,6 +12,7 @@ class ReplayRunner(
     private val executor: Executor,
     private val policy: Policy,
     private val observe: suspend () -> ScreenState,
+    private val confirm: suspend (String) -> Boolean,
     private val settleMillis: Long = DEFAULT_SETTLE_MILLIS
 ) {
 
@@ -22,8 +23,11 @@ class ReplayRunner(
     }
 
     suspend fun run(trajectory: Trajectory): Outcome {
+        var lastHash: String? = null
+
         trajectory.steps.forEachIndexed { index, step ->
             val state = observe()
+            lastHash = state.screenHash
 
             if (!TrajectoryMatcher.matches(step.signature, state)) {
                 return Outcome.Diverged(index, "screen no longer matches the recorded step")
@@ -35,7 +39,15 @@ class ReplayRunner(
             // The recorded path is not a licence to skip the guardrails
             when (val verdict = policy.check(action, state)) {
                 is Verdict.Deny -> return Outcome.Blocked(index, verdict.reason)
-                is Verdict.RequireConfirm -> return Outcome.Blocked(index, verdict.reason)
+
+                // Asking is the point of this verdict. Treating it as a block
+                // made any path containing a send or delete button permanently
+                // unrunnable, which is most of what this agent is for
+                is Verdict.RequireConfirm ->
+                    if (!confirm(verdict.reason)) {
+                        return Outcome.Blocked(index, "declined: " + verdict.reason)
+                    }
+
                 Verdict.Allow -> Unit
             }
 
@@ -45,6 +57,19 @@ class ReplayRunner(
 
             delay(settleMillis)
         }
+
+        // Replaying every step is not proof the goal was met, but a screen that
+        // is byte for byte what it was before the last action is proof that the
+        // action did nothing. Without this, a blind coordinate tap that misses
+        // is recorded as a success and the failing path gains priority
+        val ending = observe()
+        if (lastHash != null && ending.screenHash == lastHash) {
+            return Outcome.Diverged(
+                trajectory.steps.lastIndex,
+                "screen unchanged after the final step"
+            )
+        }
+
         return Outcome.Completed
     }
 

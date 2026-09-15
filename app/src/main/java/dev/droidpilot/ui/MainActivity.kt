@@ -1,6 +1,11 @@
 package dev.droidpilot.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
@@ -51,6 +56,17 @@ class MainActivity : AppCompatActivity() {
         wireActions()
         observeRunner()
         watchServiceState()
+        requestNotificationPermission()
+    }
+
+    // Without this the confirmation notification is dropped silently, which
+    // would park a run with no way for the user to learn why
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+        if (granted != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     private fun bindViews() {
@@ -87,7 +103,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun onRunClicked() {
         if (AgentRunner.isRunning) {
-            AgentRunner.cancel()
+            AgentRunner.cancel(this)
             return
         }
 
@@ -228,6 +244,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var confirmDialog: AlertDialog? = null
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) append(getString(R.string.warn_no_notifications))
+        }
 
     private companion object {
         const val COUNTDOWN = 5

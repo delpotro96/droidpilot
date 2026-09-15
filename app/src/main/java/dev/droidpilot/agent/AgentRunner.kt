@@ -9,6 +9,7 @@ import dev.droidpilot.planner.LlamaServerPlanner
 import dev.droidpilot.policy.LoopGuard
 import dev.droidpilot.policy.SafetyPolicy
 import dev.droidpilot.trajectory.FileTrajectoryStore
+import dev.droidpilot.ui.ConfirmPrompt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -79,7 +80,7 @@ object AgentRunner {
                 store = FileTrajectoryStore(File(app.filesDir, TRAJECTORY_FILE)),
                 guardFactory = { budget -> LoopGuard(app, budget) },
                 observe = { service.observe() },
-                confirm = { reason -> askUser(goalText, reason) },
+                confirm = { reason -> askUser(app, goalText, reason) },
                 onProgress = { note(goalText, it) }
             )
 
@@ -109,9 +110,10 @@ object AgentRunner {
         pendingConfirm.getAndSet(null)?.complete(approved)
     }
 
-    fun cancel() {
+    fun cancel(context: Context) {
         // A parked question would otherwise keep the loop waiting forever
         pendingConfirm.getAndSet(null)?.complete(false)
+        ConfirmPrompt.dismiss(context)
         job.getAndSet(null)?.cancel()
         finish("cancelled")
     }
@@ -120,15 +122,20 @@ object AgentRunner {
         if (!isRunning) _state.value = State.Idle
     }
 
-    private suspend fun askUser(goal: String, reason: String): Boolean {
+    private suspend fun askUser(context: Context, goal: String, reason: String): Boolean {
         val deferred = CompletableDeferred<Boolean>()
         pendingConfirm.set(deferred)
         _state.update { State.AwaitingConfirm(goal, it.log, reason) }
+
+        // The activity is stopped whenever the agent has anything to do, so the
+        // dialog it would show is not reachable. The notification is
+        ConfirmPrompt.show(context, reason)
 
         val approved = try {
             deferred.await()
         } finally {
             pendingConfirm.compareAndSet(deferred, null)
+            ConfirmPrompt.dismiss(context)
         }
 
         note(goal, if (approved) "approved: " + reason else "declined: " + reason)

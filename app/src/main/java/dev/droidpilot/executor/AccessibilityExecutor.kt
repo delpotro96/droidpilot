@@ -11,6 +11,7 @@ import dev.droidpilot.core.model.Direction
 import dev.droidpilot.core.model.Executor
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.UiElement
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -23,7 +24,17 @@ class AccessibilityExecutor(
     private val service: AccessibilityService
 ) : Executor {
 
-    override suspend fun perform(action: AgentAction, state: ScreenState): Result<Unit> = runCatching {
+    override suspend fun perform(action: AgentAction, state: ScreenState): Result<Unit> = try {
+        Result.success(apply(action, state))
+    } catch (cancelled: CancellationException) {
+        // Cancelling a run is not an action failing. Reporting it as one made
+        // the loop record a divergence against a path that was never at fault
+        throw cancelled
+    } catch (failure: Throwable) {
+        Result.failure(failure)
+    }
+
+    private suspend fun apply(action: AgentAction, state: ScreenState) {
         when (action) {
             is AgentAction.Tap -> tap(element(action.elementId, state))
             is AgentAction.LongPress -> longPress(element(action.elementId, state))

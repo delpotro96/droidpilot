@@ -20,10 +20,13 @@
     <string name="action_dump">Dump</string>
     <string name="action_clear">Clear</string>
 
+    <string name="channel_confirm">Confirmation requests</string>
+    <string name="channel_confirm_description">Shown when the agent needs approval before a destructive action.</string>
     <string name="confirm_title">Confirm before continuing</string>
     <string name="confirm_allow">Allow</string>
     <string name="confirm_deny">Stop</string>
 
+    <string name="warn_no_notifications">Notifications are off, so the agent cannot ask for approval while you are in another app. It will stop instead of guessing.</string>
     <string name="error_service_off">Accessibility service is not running.</string>
     <string name="error_no_goal">Enter a goal first.</string>
     <string name="error_bad_url">That does not look like a URL. Expected something like http://192.168.0.10:8080</string>
