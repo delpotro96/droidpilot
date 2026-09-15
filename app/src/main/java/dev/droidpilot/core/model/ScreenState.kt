@@ -8,6 +8,9 @@ data class ScreenState(
     val activity: String?,
     val elements: List<UiElement>,
     val screenHash: String,
+    // True when the tree held more than the listing can carry, so a planner
+    // that cannot find what it wants knows to scroll rather than give up
+    val truncated: Boolean = false,
     val screenshot: ByteArray? = null,
     val capturedAt: Long = System.currentTimeMillis()
 ) {

@@ -106,7 +106,6 @@ class AgentLoop(
             history += Step(
                 action = action,
                 beforeHash = state.screenHash,
-                afterHash = null,
                 succeeded = outcome.isSuccess
             )
             if (outcome.isSuccess) recorder.record(action, state)

@@ -122,8 +122,16 @@ class AccessibilityExecutor(
         check(completed) { "gesture failed" }
     }
 
-    private fun fullScreen(state: ScreenState): Rect =
-        state.elements.fold(Rect()) { acc, e -> acc.apply { union(e.bounds) } }
+    // Swiping needs somewhere to swipe. An empty tree yields an empty union,
+    // which would dispatch a zero length gesture that silently does nothing,
+    // so the display is used instead
+    private fun fullScreen(state: ScreenState): Rect {
+        val union = state.elements.fold(Rect()) { acc, e -> acc.apply { union(e.bounds) } }
+        if (!union.isEmpty) return union
+
+        val metrics = service.resources.displayMetrics
+        return Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
+    }
 
     private companion object {
         const val DURATION_TAP = 60L

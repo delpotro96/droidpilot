@@ -69,6 +69,20 @@ class ScreenStateTest {
     }
 
     @Test
+    fun `a truncated listing says so instead of looking complete`() {
+        val state = screen(elements = listOf(element(0, "First")), truncated = true)
+
+        assertTrue(ScreenSerializer.toPrompt(state).contains("more elements exist"))
+    }
+
+    @Test
+    fun `a complete listing carries no truncation notice`() {
+        val state = screen(elements = listOf(element(0, "First")))
+
+        assertFalse(ScreenSerializer.toPrompt(state).contains("more elements exist"))
+    }
+
+    @Test
     fun `a long label is truncated so one element cannot flood the prompt`() {
         val state = screen(elements = listOf(element(0, "x".repeat(200))))
 

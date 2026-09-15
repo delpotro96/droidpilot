@@ -9,7 +9,12 @@ import dev.droidpilot.core.model.UiElement
 // Turns the view tree into the numbered text listing the planner reads
 object ScreenSerializer {
 
+    // What the planner is shown
     private const val MAX_ELEMENTS = 80
+
+    // How far collection goes before giving up, so a pathological tree cannot
+    // stall the walk. Kept above MAX_ELEMENTS so overflow is detectable
+    private const val MAX_SCAN = 400
     private const val MAX_DEPTH = 40
 
     fun serialize(root: AccessibilityNodeInfo?, packageName: String, activity: String?): ScreenState {
@@ -21,13 +26,15 @@ object ScreenSerializer {
             packageName = packageName,
             activity = activity,
             elements = elements,
-            screenHash = hashOf(packageName, activity, elements)
+            screenHash = hashOf(packageName, activity, elements),
+            truncated = collected.size > elements.size
         )
     }
 
     private fun walk(node: AccessibilityNodeInfo, depth: Int, out: MutableList<UiElement>) {
-        if (depth > MAX_DEPTH || out.size >= MAX_ELEMENTS) return
+        if (depth > MAX_DEPTH || out.size >= MAX_SCAN) return
         if (!node.isVisibleToUser) return
+        // Ids are assigned on the way in, so the index is the collection order
 
         val bounds = Rect().also { node.getBoundsInScreen(it) }
         if (bounds.width() <= 0 || bounds.height() <= 0) return
@@ -111,6 +118,9 @@ object ScreenSerializer {
             }
             if (flags.isNotEmpty()) append(" (").append(flags.joinToString(",")).append(")")
             append("\n")
+        }
+        if (state.truncated) {
+            append("(more elements exist below - swipe to reach them)\n")
         }
     }
 }

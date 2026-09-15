@@ -64,5 +64,5 @@ class PlannerPromptTest {
     }
 
     private fun step(action: AgentAction, succeeded: Boolean = true) =
-        Step(action = action, beforeHash = "h", afterHash = null, succeeded = succeeded)
+        Step(action = action, beforeHash = "h", succeeded = succeeded)
 }

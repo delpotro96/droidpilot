@@ -31,10 +31,12 @@ fun screen(
     packageName: String = "com.example.app",
     activity: String? = "MainActivity",
     elements: List<UiElement> = emptyList(),
-    hash: String = "hash"
+    hash: String = "hash",
+    truncated: Boolean = false
 ) = ScreenState(
     packageName = packageName,
     activity = activity,
     elements = elements,
-    screenHash = hash
+    screenHash = hash,
+    truncated = truncated
 )

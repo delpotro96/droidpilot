@@ -28,7 +28,6 @@ sealed interface Verdict {
 data class Step(
     val action: AgentAction,
     val beforeHash: String,
-    val afterHash: String?,
     val succeeded: Boolean,
     val at: Long = System.currentTimeMillis()
 )
