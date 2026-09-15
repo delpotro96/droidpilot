@@ -30,9 +30,26 @@ class FileTrajectoryStore(private val file: File) : TrajectoryStore {
             .maxByOrNull { it.successCount }
     }
 
+    // A replanned path supersedes the old one for the same goal, but a path
+    // that has been proving itself should not lose that record to a single
+    // successful replan
     override suspend fun save(trajectory: Trajectory) = mutex.withLock {
-        val existing = read().filterNot { normalize(it.goal) == normalize(trajectory.goal) }
-        write(existing + trajectory)
+        val current = read()
+        val previous = current.firstOrNull { normalize(it.goal) == normalize(trajectory.goal) }
+        val others = current.filterNot { normalize(it.goal) == normalize(trajectory.goal) }
+
+        val inherited = when {
+            previous == null -> trajectory
+            previous.steps == trajectory.steps ->
+                trajectory.copy(
+                    successCount = previous.successCount,
+                    failureCount = previous.failureCount
+                )
+            // A genuinely different path starts from zero, but the failures that
+            // retired the old one are not held against it
+            else -> trajectory
+        }
+        write(others + inherited)
     }
 
     override suspend fun recordOutcome(id: String, success: Boolean) = mutex.withLock {
@@ -55,9 +72,17 @@ class FileTrajectoryStore(private val file: File) : TrajectoryStore {
             .getOrDefault(emptyList())
     }
 
+    // Written beside the target and renamed, so a process death mid write
+    // cannot leave every recorded path truncated or gone
     private suspend fun write(trajectories: List<Trajectory>) = withContext(Dispatchers.IO) {
         file.parentFile?.mkdirs()
-        file.writeText(json.encodeToString(trajectories))
+        val staging = File(file.parentFile, file.name + ".tmp")
+        staging.writeText(json.encodeToString(trajectories))
+        if (!staging.renameTo(file)) {
+            file.writeText(staging.readText())
+            staging.delete()
+        }
+        Unit
     }
 
     private fun normalize(goal: String) = goal.trim().lowercase()

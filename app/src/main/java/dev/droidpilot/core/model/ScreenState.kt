@@ -8,6 +8,9 @@ data class ScreenState(
     val activity: String?,
     val elements: List<UiElement>,
     val screenHash: String,
+    // Ignores body text, so a clock or an unread badge ticking over does not
+    // read as progress. Loop detection keys on this, not on screenHash
+    val structureHash: String = screenHash,
     // True when the tree held more than the listing can carry, so a planner
     // that cannot find what it wants knows to scroll rather than give up
     val truncated: Boolean = false,
@@ -39,6 +42,9 @@ data class UiElement(
     val role: Role,
     val text: String?,
     val desc: String?,
+    // The developer name for the view, such as com.app:id/delete_button. Often
+    // the only clue an unlabelled icon gives about what it does
+    val viewId: String?,
     val bounds: Rect,
     val clickable: Boolean,
     val scrollable: Boolean,
@@ -47,6 +53,10 @@ data class UiElement(
     // What the element actually shows on screen
     val label: String?
         get() = text?.takeIf { it.isNotBlank() } ?: desc?.takeIf { it.isNotBlank() }
+
+    // Everything a guardrail can read about this element, label or not
+    val identity: String
+        get() = listOfNotNull(label, viewId?.substringAfterLast("/")).joinToString(" ")
 }
 
 enum class Role {

@@ -72,10 +72,11 @@ class AgentLoop(
         val guard = guardFactory(goal.stepBudget)
         val history = mutableListOf<Step>()
         val recorder = TrajectoryRecorder(goal.raw)
+        var previousAction: AgentAction? = null
 
         while (true) {
             val state = observe()
-            guard.record(state)
+            guard.record(state, previousAction)
             guard.abortReason()?.let { return Result.Failed(it) }
 
             onProgress("thinking on " + state.packageName + " (" + state.elements.size + " elements)")
@@ -118,6 +119,7 @@ class AgentLoop(
                 succeeded = outcome.isSuccess
             )
             if (outcome.isSuccess) recorder.record(action, current)
+            previousAction = action
 
             delay(settleMillis)
         }

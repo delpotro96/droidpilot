@@ -227,7 +227,7 @@ class AgentLoopTest {
         val result = agent.run(Goal("spin forever", stepBudget = 10))
 
         assertTrue(result is AgentLoop.Result.Failed)
-        assertTrue((result as AgentLoop.Result.Failed).reason.contains("no progress"))
+        assertTrue((result as AgentLoop.Result.Failed).reason.contains("changed nothing"))
     }
 
     @Test

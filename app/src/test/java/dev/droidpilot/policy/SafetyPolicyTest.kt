@@ -114,6 +114,43 @@ class SafetyPolicyTest {
     }
 
     @Test
+    fun `an unnamed icon is judged by its resource id`() {
+        val state = screen(
+            elements = listOf(element(0, null, viewId = "com.example.app:id/delete_button", role = Role.IMAGE))
+        )
+
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
+    }
+
+    @Test
+    fun `an unnamed icon with a harmless resource id passes`() {
+        val state = screen(
+            elements = listOf(element(0, null, viewId = "com.example.app:id/avatar", role = Role.IMAGE))
+        )
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(0), state))
+    }
+
+    @Test
+    fun `an element with neither label nor id is not judged`() {
+        val state = screen(elements = listOf(element(0, null, role = Role.IMAGE)))
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(0), state))
+    }
+
+    @Test
+    fun `a pay label on a child of the clickable parent is still caught`() {
+        val state = screen(
+            elements = listOf(
+                element(0, null, viewId = "com.shop:id/pay_row", role = Role.BUTTON),
+                element(1, "결제하기", role = Role.TEXT, clickable = false)
+            )
+        )
+
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
+    }
+
+    @Test
     fun `terminal actions bypass the checks`() {
         val state = screen(packageName = "viva.republica.toss", elements = listOf(element(0, "결제하기")))
 

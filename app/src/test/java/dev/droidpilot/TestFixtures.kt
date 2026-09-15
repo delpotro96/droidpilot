@@ -8,6 +8,7 @@ import dev.droidpilot.core.model.UiElement
 fun element(
     id: Int,
     label: String? = null,
+    viewId: String? = null,
     role: Role = Role.BUTTON,
     left: Int = 0,
     top: Int = 0,
@@ -21,6 +22,7 @@ fun element(
     role = role,
     text = label,
     desc = null,
+    viewId = viewId,
     bounds = Rect(left, top, right, bottom),
     clickable = clickable,
     scrollable = scrollable,
@@ -32,11 +34,13 @@ fun screen(
     activity: String? = "MainActivity",
     elements: List<UiElement> = emptyList(),
     hash: String = "hash",
+    structureHash: String = hash,
     truncated: Boolean = false
 ) = ScreenState(
     packageName = packageName,
     activity = activity,
     elements = elements,
     screenHash = hash,
+    structureHash = structureHash,
     truncated = truncated
 )

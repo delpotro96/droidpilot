@@ -34,16 +34,20 @@ object TrajectoryMatcher {
 
     // Labels survive layout shifts better than coordinates, so they are tried first
     fun resolve(ref: ElementRef, live: ScreenState): UiElement? {
-        val byLabel = ref.label?.let { label ->
-            live.elements
-                .filter { it.label == label && it.role == ref.role }
+        if (ref.label != null) {
+            // A recorded label only ever resolves to the same label. Falling
+            // back to position here would press whatever moved into the old
+            // spot, which is how a remembered Cancel becomes an unnamed icon
+            return live.elements
+                .filter { it.label == ref.label && it.role == ref.role }
                 .minByOrNull { drift(ref, it) }
+                ?.takeIf { drift(ref, it) <= MAX_DRIFT_PX }
         }
-        if (byLabel != null && drift(ref, byLabel) <= MAX_DRIFT_PX) return byLabel
 
-        // Unlabelled icons only have their position
+        // Unlabelled icons only ever had their position. Requiring the
+        // replacement to be unlabelled too keeps a named button out of the slot
         return live.elements
-            .filter { it.role == ref.role && it.clickable }
+            .filter { it.role == ref.role && it.clickable && it.label == null }
             .minByOrNull { drift(ref, it) }
             ?.takeIf { drift(ref, it) <= MAX_DRIFT_PX }
     }

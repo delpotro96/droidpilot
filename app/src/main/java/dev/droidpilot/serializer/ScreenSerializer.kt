@@ -26,7 +26,10 @@ object ScreenSerializer {
             packageName = packageName,
             activity = activity,
             elements = elements,
-            screenHash = hashOf(packageName, activity, elements),
+            screenHash = hashOf(packageName, activity, elements) { it.label.orEmpty() },
+            structureHash = hashOf(packageName, activity, elements.filter { it.clickable || it.editable }) {
+                it.label.orEmpty()
+            },
             truncated = collected.size > elements.size
         )
     }
@@ -49,6 +52,7 @@ object ScreenSerializer {
                 role = role,
                 text = text,
                 desc = desc,
+                viewId = node.viewIdResourceName,
                 bounds = bounds,
                 clickable = node.isClickable,
                 scrollable = node.isScrollable,
@@ -90,11 +94,15 @@ object ScreenSerializer {
         }
     }
 
-    // Structural fingerprint used to detect that the agent is not making progress
-    private fun hashOf(pkg: String, activity: String?, elements: List<UiElement>): String {
+    private fun hashOf(
+        pkg: String,
+        activity: String?,
+        elements: List<UiElement>,
+        label: (UiElement) -> String
+    ): String {
         val sig = buildString {
             append(pkg).append("|").append(activity.orEmpty()).append("|")
-            elements.forEach { append(it.role).append(":").append(it.label.orEmpty()).append(";") }
+            elements.forEach { append(it.role).append(":").append(label(it)).append(";") }
         }
         return sig.hashCode().toUInt().toString(16)
     }

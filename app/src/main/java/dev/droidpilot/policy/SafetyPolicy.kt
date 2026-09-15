@@ -3,6 +3,7 @@ package dev.droidpilot.policy
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Policy
 import dev.droidpilot.core.model.ScreenState
+import dev.droidpilot.core.model.UiElement
 import dev.droidpilot.core.model.Verdict
 
 // Evaluated before anything reaches the screen, whatever the planner asked for
@@ -40,11 +41,15 @@ class SafetyPolicy(
     // safer but made the agent useless: one chat message saying "결제했어?" was
     // enough to lock the whole conversation out
     private fun screenVerdict(state: ScreenState): Verdict? {
+        // Not filtered on clickable. The label of a payment button is very
+        // often a child TextView while the parent handles the press, which is
+        // the same layout the executor climbs for. Requiring clickable here
+        // would miss exactly those screens
         val hit = state.elements
-            .filter { it.clickable && isButtonShaped(it.label) }
-            .firstOrNull { element -> matches(element.label, PAYMENT_KEYWORDS) }
+            .filter { isControlSized(it) }
+            .firstOrNull { matches(it.identity, PAYMENT_KEYWORDS) }
 
-        return hit?.let { Verdict.Deny("looks like a payment screen: " + it.label) }
+        return hit?.let { Verdict.Deny("looks like a payment screen: " + it.identity) }
     }
 
     private fun actionVerdict(action: AgentAction, state: ScreenState): Verdict {
@@ -58,16 +63,21 @@ class SafetyPolicy(
         // Typing into a field named "delete" is not the destructive act, tapping is
         if (action is AgentAction.Input) return Verdict.Allow
 
-        if (isButtonShaped(element.label) && matches(element.label, IRREVERSIBLE_KEYWORDS)) {
-            return Verdict.RequireConfirm("irreversible action: " + element.label)
+        if (isControlSized(element) && matches(element.identity, IRREVERSIBLE_KEYWORDS)) {
+            return Verdict.RequireConfirm("irreversible action: " + element.identity)
         }
         return Verdict.Allow
     }
 
     // A control carries a short label. Prose that happens to contain the word is
-    // body text, not something the agent is about to press
-    private fun isButtonShaped(label: String?): Boolean =
-        label != null && label.length <= MAX_CONTROL_LABEL
+    // body text, not something the agent is about to press. An element with no
+    // label at all still has a resource id to judge, which is the only handle
+    // an unnamed icon offers
+    private fun isControlSized(element: UiElement): Boolean {
+        val identity = element.identity
+        if (identity.isBlank()) return false
+        return element.label == null || element.label!!.length <= MAX_CONTROL_LABEL
+    }
 
     // Length alone cannot separate "Proceed to checkout" from a chat message of
     // the same length, so the keyword also has to account for much of the label.
