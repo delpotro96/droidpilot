@@ -21,9 +21,10 @@ everything has to work with none of them registered.
 |---|---|---|
 | 1 | Observer and serializer | written, not verified on a device |
 | 2 | Executor and policy | written, not verified on a device |
-| 3 | Trajectory record and replay | written, 36 unit tests green |
-| 4 | Planner (LLM) | not started |
-| 5 | Shortcut tools | not started |
+| 3 | Trajectory record and replay | written, covered by unit tests |
+| 4 | Planner (LLM) | written, covered by unit tests |
+| 5 | Agent loop | written, covered by unit tests |
+| 6 | Shortcut tools | not started |
 
 ## Design notes
 
@@ -52,8 +53,22 @@ was added in API 30.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The unit tests run on the JVM through Robolectric, so a device is only
-needed to exercise the accessibility service itself.
+65 unit tests run on the JVM through Robolectric, so a device is only needed
+to exercise the accessibility service itself.
+
+## Planner
+
+The planner is a llama.cpp server, reached over HTTP. Point it at the phone,
+at a machine on the same network, or anywhere else:
+
+```kotlin
+LlamaServerPlanner(baseUrl = "http://192.168.0.10:8080")
+```
+
+Requests carry a GBNF grammar that constrains decoding to the action schema,
+so the model physically cannot emit malformed JSON. That is the first thing
+small models get wrong, and removing the failure mode outright is what makes
+a 4B model viable here.
 
 ## Run
 
