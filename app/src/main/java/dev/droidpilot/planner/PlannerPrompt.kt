@@ -23,6 +23,15 @@ object PlannerPrompt {
 
         Rules:
         - Emit exactly one action as JSON, nothing else.
+        - Every press carries a risk you declare:
+            "none"          ordinary navigation
+            "spends"        pays, orders, subscribes, transfers money
+            "irreversible"  sends, deletes, leaves, resets, or confirms one of
+                            those. If you are about to press the OK button of a
+                            dialog, the risk is whatever the dialog does.
+          Declaring it does not stop you - it asks the user first. Guessing
+          "none" to avoid the question is the one thing you must not do.
+        - If the screen is still loading, emit wait rather than pressing.
         - If the goal is already achieved, emit done.
         - If the screen does not let you make progress, emit back or swipe.
         - If you cannot tell which element is correct, emit ask. Never guess

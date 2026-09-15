@@ -100,9 +100,15 @@ object AgentRunner {
                 }
         }
 
-        // Only one run at a time, and the job is published before it can finish
+        // Only one run at a time, and the job is published before it can
+        // finish. A cancelled run is still unwinding for a moment after the
+        // button says Run again, and a start that lost that race used to
+        // disappear without a word
         if (!job.compareAndSet(null, started)) {
             started.cancel()
+            _state.update {
+                State.Finished("the previous run is still stopping, try again", it.log)
+            }
             return
         }
         cancelling = false
@@ -126,6 +132,9 @@ object AgentRunner {
         cancelling = true
         pendingConfirm.getAndSet(null)?.cancel()
         ConfirmPrompt.dismiss(context)
+
+        // Cleared by the completion handler rather than here, so a restart
+        // cannot take the slot while the loop is still unwinding
         job.get()?.cancel()
         finish("cancelled")
     }

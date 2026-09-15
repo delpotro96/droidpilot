@@ -18,8 +18,8 @@ class ReplayRunner(
 
     sealed interface Outcome {
         // Every step ran. Verified says whether the screen actually moved
-        // afterwards - an unverified run is not a failure, but it is not
-        // evidence the path works either
+        // afterwards. An unverified run is not a failure - a switch toggling
+        // leaves no trace in the view tree - but it is not evidence either
         data class Completed(val verified: Boolean) : Outcome
 
         data class Diverged(val atStep: Int, val reason: String) : Outcome

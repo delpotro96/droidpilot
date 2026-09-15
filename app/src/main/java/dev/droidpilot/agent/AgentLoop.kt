@@ -10,6 +10,7 @@ import dev.droidpilot.core.model.Step
 import dev.droidpilot.core.model.Verdict
 import dev.droidpilot.policy.LoopGuard
 import dev.droidpilot.trajectory.ReplayRunner
+import dev.droidpilot.trajectory.RunOutcome
 import dev.droidpilot.trajectory.TrajectoryRecorder
 import dev.droidpilot.trajectory.TrajectoryStore
 import kotlinx.coroutines.delay
@@ -64,22 +65,21 @@ class AgentLoop(
         val outcome = ReplayRunner(executor, policy, observe, confirm, settleMillis).run(trajectory)
         return when (outcome) {
             is ReplayRunner.Outcome.Completed -> {
-                store.recordOutcome(trajectory.id, success = outcome.verified)
+                // An unverified run is not a failure - toggling a switch leaves
+                // no trace in the view tree - so it is neither scored as one nor
+                // reported as an error. It is counted separately, and a path
+                // that is never once seen to do anything retires on that count
+                store.recordOutcome(
+                    trajectory.id,
+                    if (outcome.verified) RunOutcome.WORKED else RunOutcome.UNVERIFIED
+                )
+                if (!outcome.verified) onProgress("replayed, though the screen did not visibly change")
 
-                if (outcome.verified) {
-                    Result.Done("replayed a stored path", replayed = true)
-                } else {
-                    // Every step ran, so replanning from here could repeat the
-                    // last one. But a path that never moves the screen is doing
-                    // nothing, and reporting that as success left it selected
-                    // forever. It is scored as a failure and retires on its own
-                    onProgress("replayed, but the screen never moved")
-                    Result.Failed("the stored path ran without changing anything")
-                }
+                Result.Done("replayed a stored path", replayed = true)
             }
 
             is ReplayRunner.Outcome.Diverged -> {
-                store.recordOutcome(trajectory.id, success = false)
+                store.recordOutcome(trajectory.id, RunOutcome.FAILED)
                 onProgress("replay diverged at step " + outcome.atStep + ", replanning")
                 onPartial(outcome.atStep > 0)
                 null
@@ -164,15 +164,18 @@ class AgentLoop(
     // has to hold is not that the screen is identical, but that the element the
     // policy vetted is still the one at that index
     private fun stillAddresses(action: AgentAction, before: ScreenState, after: ScreenState): Boolean {
-        if (before.structureHash != after.structureHash) return false
-
         val id = when (action) {
             is AgentAction.Tap -> action.elementId
             is AgentAction.LongPress -> action.elementId
             is AgentAction.Input -> action.elementId
+            // Waiting is what the planner emits precisely because the screen
+            // is still moving. Testing it against a settled screen meant wait
+            // could never run in the one situation that calls for it
             is AgentAction.Swipe -> action.elementId ?: return true
             else -> return true
         }
+
+        if (before.structureHash != after.structureHash) return false
 
         val was = before.elements.getOrNull(id) ?: return false
         val now = after.elements.getOrNull(id) ?: return false

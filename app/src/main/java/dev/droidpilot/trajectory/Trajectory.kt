@@ -14,17 +14,25 @@ data class Trajectory(
     val steps: List<RecordedStep>,
     val recordedAt: Long,
     val successCount: Int = 0,
-    val failureCount: Int = 0
+    val failureCount: Int = 0,
+    // Ran to the end without the screen visibly changing. A switch toggling or
+    // a toast appearing leaves no trace in the view tree, so this is not proof
+    // of failure - but a path that never once shows an effect is doing nothing
+    val unverifiedCount: Int = 0
 ) {
     // A path that keeps failing is worse than replanning from scratch, but a
     // single divergence is usually a popup rather than a bad path. Judging on
     // the net record lets a good path survive one bad day, and made the limit
     // reachable at all - the old rule retired a path on its first failure
     val isTrustworthy: Boolean
-        get() = failureCount - successCount < MAX_FAILURES
+        get() = failureCount - successCount < MAX_FAILURES &&
+            (successCount > 0 || unverifiedCount < MAX_UNVERIFIED)
 
     companion object {
         const val MAX_FAILURES = 3
+
+        // Never once seen to do anything is evidence enough on its own
+        const val MAX_UNVERIFIED = 3
     }
 }
 

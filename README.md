@@ -41,6 +41,12 @@ everything has to work with none of them registered.
 - **`AgentAction` is a sealed interface.** The planner cannot emit free-form
   text. `AskUser` is a first-class action so an unsure planner asks rather
   than tapping at random.
+- **The planner declares what its press will do.** Every press carries a risk
+  of `none`, `spends` or `irreversible`, and the grammar will not let it be
+  omitted. Four attempts at inferring danger from the label failed in both
+  directions at once, because the string on screen does not carry the
+  information — the model does. Keyword rules remain as a net that can raise a
+  verdict the planner played down, never lower one.
 - **Inference stays local.** llama.cpp with a GBNF grammar constraining the
   output to the action schema. The `Planner` interface swaps between
   on-device, a home server, and a cloud endpoint.

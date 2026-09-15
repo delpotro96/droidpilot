@@ -61,7 +61,7 @@ class AccessibilityExecutor(
 
         if (clickable?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
 
-        requireBlindTapIsTheOnlyOption(target)
+        requireGestureIsSafe(target, found = node != null)
         gestureTap(target.bounds, DURATION_TAP)
     }
 
@@ -69,7 +69,7 @@ class AccessibilityExecutor(
         val node = NodeFinder.find(service.rootInActiveWindow, target)
         if (node?.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) == true) return
 
-        requireBlindTapIsTheOnlyOption(target)
+        requireGestureIsSafe(target, found = node != null)
         gestureTap(target.bounds, DURATION_LONG_PRESS)
     }
 
@@ -83,10 +83,20 @@ class AccessibilityExecutor(
     // that matters is whether this screen exposes nodes at all. One that does
     // has re-laid out and is not to be guessed at; one that does not is a
     // rendered surface where coordinates are the only handle there has ever been
-    private fun requireBlindTapIsTheOnlyOption(target: UiElement) {
-        val root = service.rootInActiveWindow ?: return
-        check(!NodeFinder.hasAnyActionableNode(root)) {
-            "the screen moved and still has nodes, refusing to press " +
+    private fun requireGestureIsSafe(target: UiElement, found: Boolean) {
+        // The node is still there and simply refuses the click action, as a
+        // custom view or an unclickable icon inside a large row will. The
+        // screen has not moved, so its coordinates are still its own
+        if (found) return
+
+        // Otherwise the lookup failed, which is the signal that the screen
+        // changed. A rendered surface such as a game exposes nothing and has
+        // only ever been reachable by coordinates; anything else has re-laid
+        // out and must not be guessed at. A missing root tells us nothing, so
+        // it is treated as the unsafe case
+        val root = service.rootInActiveWindow
+        check(root != null && !NodeFinder.hasAnyActionableNode(root)) {
+            "the element is gone and the screen still has nodes, refusing to press " +
                 target.bounds.toShortString() + " blind"
         }
     }

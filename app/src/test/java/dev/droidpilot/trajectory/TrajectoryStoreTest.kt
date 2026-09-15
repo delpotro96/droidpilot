@@ -70,7 +70,7 @@ class TrajectoryStoreTest {
         val (store, _) = store()
         store.save(trajectory("a", "send a message"))
 
-        store.recordOutcome("a", success = false)
+        store.recordOutcome("a", RunOutcome.FAILED)
 
         // One popup is not evidence the path is wrong
         assertNotNull(store.findFor("send a message"))
@@ -81,7 +81,7 @@ class TrajectoryStoreTest {
         val (store, _) = store()
         store.save(trajectory("a", "send a message"))
 
-        repeat(Trajectory.MAX_FAILURES) { store.recordOutcome("a", success = false) }
+        repeat(Trajectory.MAX_FAILURES) { store.recordOutcome("a", RunOutcome.FAILED) }
 
         assertNull(store.findFor("send a message"))
         // It is still on disk, only untrusted
@@ -89,12 +89,36 @@ class TrajectoryStoreTest {
     }
 
     @Test
+    fun `a path never seen to do anything retires on that alone`() = runTest {
+        val (store, _) = store()
+        store.save(trajectory("a", "send a message"))
+
+        // Ran to the end every time without the screen changing, which is not
+        // a failure but is not evidence of working either
+        repeat(Trajectory.MAX_UNVERIFIED) { store.recordOutcome("a", RunOutcome.UNVERIFIED) }
+
+        assertNull(store.findFor("send a message"))
+    }
+
+    @Test
+    fun `a path that has worked once tolerates unverified runs`() = runTest {
+        val (store, _) = store()
+        store.save(trajectory("a", "send a message"))
+
+        store.recordOutcome("a", RunOutcome.WORKED)
+        repeat(5) { store.recordOutcome("a", RunOutcome.UNVERIFIED) }
+
+        // Toggling a switch leaves no trace in the view tree
+        assertNotNull(store.findFor("send a message"))
+    }
+
+    @Test
     fun `a proven path survives the odd failure`() = runTest {
         val (store, _) = store()
         store.save(trajectory("a", "send a message"))
 
-        repeat(5) { store.recordOutcome("a", success = true) }
-        repeat(3) { store.recordOutcome("a", success = false) }
+        repeat(5) { store.recordOutcome("a", RunOutcome.WORKED) }
+        repeat(3) { store.recordOutcome("a", RunOutcome.FAILED) }
 
         assertNotNull(store.findFor("send a message"))
     }
@@ -103,7 +127,7 @@ class TrajectoryStoreTest {
     fun `an unchanged path keeps its record when saved again`() = runTest {
         val (store, _) = store()
         store.save(trajectory("a", "send a message"))
-        repeat(4) { store.recordOutcome("a", success = true) }
+        repeat(4) { store.recordOutcome("a", RunOutcome.WORKED) }
 
         store.save(trajectory("b", "send a message"))
 
@@ -116,9 +140,9 @@ class TrajectoryStoreTest {
         store.save(trajectory("a", "goal one"))
         store.save(trajectory("b", "goal two"))
 
-        store.recordOutcome("a", success = true)
-        store.recordOutcome("a", success = true)
-        store.recordOutcome("b", success = false)
+        store.recordOutcome("a", RunOutcome.WORKED)
+        store.recordOutcome("a", RunOutcome.WORKED)
+        store.recordOutcome("b", RunOutcome.FAILED)
 
         assertEquals(2, store.findFor("goal one")?.successCount)
         assertEquals(1, store.all().first { it.id == "b" }.failureCount)

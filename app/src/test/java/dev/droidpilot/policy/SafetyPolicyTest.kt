@@ -163,11 +163,60 @@ class SafetyPolicyTest {
     }
 
     @Test
-    fun `a long paragraph containing send does not trigger confirmation`() {
-        val longLabel = "Tap here to send the weekly summary to everyone on the list"
+    fun `a long label on the pressed control is still read`() {
+        // The length gate that used to skip this was silently disabling the
+        // guard on every vendor button with a wordy label
+        val longLabel = "Yes, permanently delete my account"
         val state = screen(elements = listOf(element(0, longLabel)))
 
-        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(0), state))
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
+    }
+
+    @Test
+    fun `a wordy checkout button is not skipped for being long`() {
+        val state = screen(elements = listOf(element(0, "Confirm and pay 1,299.00")))
+
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
+    }
+
+    @Test
+    fun `body text inside a list row is not treated as a control`() {
+        // The row is far larger than the line it holds, which is what tells a
+        // button apart from a container
+        val state = screen(
+            elements = listOf(
+                element(0, null, viewId = "com.app:id/chat_row", left = 0, top = 0, right = 1080, bottom = 200),
+                element(1, "내일 결제하기로 했어", role = Role.TEXT, clickable = false,
+                    left = 200, top = 40, right = 900, bottom = 90),
+                element(2, "New chat", left = 0, top = 900, right = 300, bottom = 1000)
+            )
+        )
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(2), state))
+    }
+
+    @Test
+    fun `a declared risk is honoured even when nothing matches`() {
+        val state = screen(elements = listOf(element(0, "OK")))
+
+        assertTrue(
+            policy.check(
+                AgentAction.Tap(0, dev.droidpilot.core.model.Risk.IRREVERSIBLE),
+                state
+            ) is Verdict.RequireConfirm
+        )
+    }
+
+    @Test
+    fun `a swipe across a row is judged, not waved through`() {
+        val state = screen(elements = listOf(element(0, "삭제")))
+
+        assertTrue(
+            policy.check(
+                AgentAction.Swipe(dev.droidpilot.core.model.Direction.LEFT, 0),
+                state
+            ) is Verdict.RequireConfirm
+        )
     }
 
     @Test

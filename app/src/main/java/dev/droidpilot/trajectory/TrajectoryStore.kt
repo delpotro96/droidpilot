@@ -9,10 +9,12 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
+enum class RunOutcome { WORKED, UNVERIFIED, FAILED }
+
 interface TrajectoryStore {
     suspend fun findFor(goal: String): Trajectory?
     suspend fun save(trajectory: Trajectory)
-    suspend fun recordOutcome(id: String, success: Boolean)
+    suspend fun recordOutcome(id: String, outcome: RunOutcome)
     suspend fun all(): List<Trajectory>
 }
 
@@ -43,7 +45,8 @@ class FileTrajectoryStore(private val file: File) : TrajectoryStore {
             previous.steps == trajectory.steps ->
                 trajectory.copy(
                     successCount = previous.successCount,
-                    failureCount = previous.failureCount
+                    failureCount = previous.failureCount,
+                    unverifiedCount = previous.unverifiedCount
                 )
             // A genuinely different path starts from zero, but the failures that
             // retired the old one are not held against it
@@ -52,12 +55,12 @@ class FileTrajectoryStore(private val file: File) : TrajectoryStore {
         write(others + inherited)
     }
 
-    override suspend fun recordOutcome(id: String, success: Boolean) = mutex.withLock {
+    override suspend fun recordOutcome(id: String, outcome: RunOutcome) = mutex.withLock {
         val updated = read().map {
-            when {
-                it.id != id -> it
-                success -> it.copy(successCount = it.successCount + 1)
-                else -> it.copy(failureCount = it.failureCount + 1)
+            if (it.id != id) it else when (outcome) {
+                RunOutcome.WORKED -> it.copy(successCount = it.successCount + 1)
+                RunOutcome.FAILED -> it.copy(failureCount = it.failureCount + 1)
+                RunOutcome.UNVERIFIED -> it.copy(unverifiedCount = it.unverifiedCount + 1)
             }
         }
         write(updated)

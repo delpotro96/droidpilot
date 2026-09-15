@@ -2,20 +2,26 @@ package dev.droidpilot.policy
 
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Policy
+import dev.droidpilot.core.model.Risk
 import dev.droidpilot.core.model.Role
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.UiElement
 import dev.droidpilot.core.model.Verdict
+import dev.droidpilot.core.model.declaredRisk
 
 // Evaluated before anything reaches the screen, whatever the planner asked for.
 //
-// Two severities, deliberately unequal. Denying a screen costs the whole run,
-// so it takes an unambiguous checkout phrase. Asking costs one dialog, so
-// anything that smells of money or of an action that cannot be undone asks.
-// An earlier version scored keyword coverage as a fraction of label length,
-// which was wrong in both directions at once: "결제했어?" in a chat scored 0.40
-// and locked the conversation, while "Confirm and pay" scored 0.20 and went
-// straight through. Length is not what separates a button from a sentence.
+// The planner declares what its press will do, and that declaration is what
+// decides. Four rounds of inferring danger from the label text failed in both
+// directions at once - a chat message about having paid locked the whole
+// conversation, while Confirm and pay went straight through - because the
+// string on screen does not carry the information. The model knows it is
+// pressing a delete button.
+//
+// The keyword rules remain, but only to raise a verdict the planner played
+// down. They can never lower one, so a model that lies or simply does not know
+// is still caught on the obvious cases, and a model that is honest is not
+// second-guessed by a regex.
 class SafetyPolicy(
     private val blockedPackages: Set<String> = DEFAULT_BLOCKED_PACKAGES,
     private val allowedPackages: Set<String>? = null
@@ -32,7 +38,9 @@ class SafetyPolicy(
 
         packageVerdict(state)?.let { return it }
         screenVerdict(action, state)?.let { return it }
-        return actionVerdict(action, state)
+
+        declaredVerdict(action)?.let { return it }
+        return keywordVerdict(action, state)
     }
 
     private fun packageVerdict(state: ScreenState): Verdict? {
@@ -46,8 +54,8 @@ class SafetyPolicy(
     }
 
     // A checkout screen is denied outright, but only on a phrase that cannot
-    // mean anything else. A bottom navigation tab reading Pay, or a message
-    // about having paid, must not cost the agent the whole run
+    // mean anything else, and only on something a person could press. Denying
+    // costs the whole run, so a message mentioning a purchase must not do it
     private fun screenVerdict(action: AgentAction, state: ScreenState): Verdict? {
         // Leaving is how the agent gets off a payment screen. Denying the way
         // out strands it there with nothing it is allowed to do
@@ -57,18 +65,24 @@ class SafetyPolicy(
         return hit?.let { Verdict.Deny("checkout screen: " + it.describe) }
     }
 
-    // Asking is cheap, so this net is wide. It covers the element the planner
-    // named and any control drawn on top of it, because the label of a button
-    // is routinely a child of the view that handles the press and the planner
-    // may name either one
-    private fun actionVerdict(action: AgentAction, state: ScreenState): Verdict {
+    private fun declaredVerdict(action: AgentAction): Verdict? = when (action.declaredRisk) {
+        Risk.IRREVERSIBLE -> Verdict.RequireConfirm("the planner called this irreversible")
+        Risk.SPENDS -> Verdict.RequireConfirm("the planner said this spends money")
+        Risk.NONE -> null
+    }
+
+    // The safety net under a planner that called something harmless. It reads
+    // only the control being pressed, never the prose around it
+    private fun keywordVerdict(action: AgentAction, state: ScreenState): Verdict {
         val named = when (action) {
             is AgentAction.Tap -> state.elements.getOrNull(action.elementId)
             is AgentAction.LongPress -> state.elements.getOrNull(action.elementId)
+            // A left swipe across a list row is how most apps delete one
+            is AgentAction.Swipe -> action.elementId?.let { state.elements.getOrNull(it) }
             else -> null
         } ?: return Verdict.Allow
 
-        val group = overlapping(named, state)
+        val group = pressedTogether(named, state)
         group.firstOrNull { matches(it, IRREVERSIBLE_WORDS) }?.let {
             return Verdict.RequireConfirm("cannot be undone: " + it.describe)
         }
@@ -78,35 +92,40 @@ class SafetyPolicy(
         return Verdict.Allow
     }
 
-    // The named element plus whatever shares its space. A wrapper with no label
-    // and a child carrying the text are one control to a person, and judging
-    // only the one the model happened to name left the other unguarded
-    private fun overlapping(named: UiElement, state: ScreenState): List<UiElement> =
+    // The named element and the label drawn inside it. A button keeps its text
+    // in a child, and the planner may name either half, but a list row is not
+    // one control with its contents - reading a row that way turned every chat
+    // preview into a verdict about the row
+    private fun pressedTogether(named: UiElement, state: ScreenState): List<UiElement> =
         listOf(named) + state.elements.filter {
-            it.id != named.id && (it.bounds.contains(named.bounds) || named.bounds.contains(it.bounds))
+            it.id != named.id &&
+                (wraps(named, it) || wraps(it, named))
         }
 
-    // A control is something a person can press. Prose is not, even when a
-    // scrolling container above it happens to be clickable
+    // Whether the outer element is a control drawn around the inner one rather
+    // than a container that merely holds it somewhere
+    private fun wraps(outer: UiElement, inner: UiElement): Boolean =
+        outer.bounds.contains(inner.bounds) && area(outer) <= area(inner) * MAX_WRAPPER_RATIO
+
+    private fun area(element: UiElement): Long =
+        element.bounds.width().toLong() * element.bounds.height().toLong()
+
+    // A control is something a person can press. Prose is not, even when the
+    // list row behind it happens to be clickable - which on Android it always
+    // is, and which is why a size test rather than a clickable test decides
     private fun isControl(element: UiElement, state: ScreenState): Boolean {
-        if (element.role == Role.TEXT && !element.clickable) {
-            // Unless a control is drawn exactly around it, which is how a
-            // labelled button appears in the tree
-            return state.elements.any {
-                it.clickable && it.role != Role.LIST && it.bounds.contains(element.bounds)
-            }
-        }
-        return element.clickable || element.role == Role.BUTTON
+        if (element.clickable || element.role == Role.BUTTON) return true
+        if (element.role != Role.TEXT) return false
+
+        return state.elements.any { it.clickable && wraps(it, element) }
     }
 
     private fun matches(element: UiElement, keywords: List<String>): Boolean {
         val label = element.label
-        if (label != null) {
-            return label.length <= MAX_CONTROL_LABEL && containsKeyword(label, keywords)
-        }
+        if (label != null) return containsKeyword(label, keywords)
+
         // Only consulted when the element says nothing, which is the case the
-        // fallback exists for: an icon with no contentDescription. Reading it
-        // alongside a label turns a row in a payment history into a checkout
+        // fallback exists for: an icon with no contentDescription
         return element.clickable && matchesId(element.idName, keywords)
     }
 
@@ -139,8 +158,9 @@ class SafetyPolicy(
     }
 
     companion object {
-        // Longer than any button label, shorter than a sentence
-        const val MAX_CONTROL_LABEL = 24
+        // A button is a little larger than the text inside it. A list row is
+        // many times larger than any one line it holds
+        const val MAX_WRAPPER_RATIO = 6
 
         private const val ASCII_LIMIT = 128
         private val ID_SEPARATORS = charArrayOf('_', '-', '.')
@@ -165,14 +185,14 @@ class SafetyPolicy(
         // Unambiguous enough to cost the whole run. A single word never is
         private val CHECKOUT_PHRASES = listOf(
             "결제하기", "구매하기", "주문하기", "결제 진행", "결제하시겠",
-            "checkout", "check out", "place order", "place your order",
-            "complete purchase", "confirm and pay", "pay now", "buy now"
+            "checkout", "check out", "place order", "complete purchase",
+            "confirm and pay", "pay now", "buy now"
         )
 
         // Worth a question before the agent spends anything
         private val MONEY_WORDS = listOf(
-            "결제", "송금", "이체", "출금", "카드 등록", "간편결제", "구매", "주문",
-            "pay", "payment", "purchase", "buy", "order", "checkout"
+            "결제", "송금", "이체", "출금", "카드 등록", "간편결제", "구매", "주문", "구독",
+            "pay", "payment", "purchase", "buy", "order", "checkout", "subscribe"
         )
 
         // 확인 is the OK button of nearly every Korean confirmation dialog, and

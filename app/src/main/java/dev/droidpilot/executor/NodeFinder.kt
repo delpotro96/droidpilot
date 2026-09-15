@@ -21,7 +21,12 @@ object NodeFinder {
 
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            search(child, target, depth + 1)?.let { return it }
+            val found = search(child, target, depth + 1)
+            if (found != null) return found
+            // Kept only if it is the answer. No-op from API 33, a real pool
+            // leak on the API 30 devices this still supports
+            @Suppress("DEPRECATION")
+            child.recycle()
         }
         return null
     }
@@ -74,9 +79,16 @@ object NodeFinder {
         while (current != null && hops < MAX_ANCESTOR_HOPS) {
             if (current.isClickable) {
                 val bounds = Rect().also { current!!.getBoundsInScreen(it) }
-                return if (area(bounds) <= limit) current else null
+                if (area(bounds) <= limit) return current
+
+                @Suppress("DEPRECATION")
+                current.recycle()
+                return null
             }
-            current = current.parent
+            val parent = current.parent
+            @Suppress("DEPRECATION")
+            current.recycle()
+            current = parent
             hops++
         }
         return null

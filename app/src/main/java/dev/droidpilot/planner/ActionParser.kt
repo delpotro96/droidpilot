@@ -2,6 +2,7 @@ package dev.droidpilot.planner
 
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Direction
+import dev.droidpilot.core.model.Risk
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -22,10 +23,14 @@ object ActionParser {
         val obj = json.parseToJsonElement(body).jsonObject
 
         when (val name = obj.string("action") ?: error("missing action field")) {
-            "tap" -> AgentAction.Tap(obj.requireInt("elementId"))
-            "longPress" -> AgentAction.LongPress(obj.requireInt("elementId"))
+            "tap" -> AgentAction.Tap(obj.requireInt("elementId"), obj.risk())
+            "longPress" -> AgentAction.LongPress(obj.requireInt("elementId"), obj.risk())
             "input" -> AgentAction.Input(obj.requireInt("elementId"), obj.requireString("text"))
-            "swipe" -> AgentAction.Swipe(direction(obj.requireString("direction")), obj.int("elementId"))
+            "swipe" -> AgentAction.Swipe(
+                direction(obj.requireString("direction")),
+                obj.int("elementId"),
+                obj.risk()
+            )
             "back" -> AgentAction.Back
             "home" -> AgentAction.Home
             "wait" -> AgentAction.Wait(
@@ -77,6 +82,14 @@ object ActionParser {
     private fun JsonObject.string(key: String) = this[key]?.jsonPrimitive?.contentOrNull
     private fun JsonObject.long(key: String) = this[key]?.jsonPrimitive?.longOrNull
     private fun JsonObject.int(key: String) = this[key]?.jsonPrimitive?.intOrNull
+
+    // A server without grammar support may omit it. Silence is not a promise
+    // that the action is safe, so the keyword net decides in that case
+    private fun JsonObject.risk(): Risk = when (string("risk")?.lowercase()) {
+        "spends" -> Risk.SPENDS
+        "irreversible" -> Risk.IRREVERSIBLE
+        else -> Risk.NONE
+    }
 
     private fun JsonObject.requireInt(key: String): Int =
         this[key]?.jsonPrimitive?.intOrNull ?: error("missing or non-numeric field: " + key)
