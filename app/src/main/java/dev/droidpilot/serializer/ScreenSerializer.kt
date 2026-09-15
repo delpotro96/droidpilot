@@ -61,7 +61,14 @@ object ScreenSerializer {
         }
 
         for (i in 0 until node.childCount) {
-            walk(node.getChild(i) ?: continue, depth + 1, out)
+            val child = node.getChild(i) ?: continue
+            try {
+                walk(child, depth + 1, out)
+            } finally {
+                // No-op from API 33, a real pool leak before it
+                @Suppress("DEPRECATION")
+                child.recycle()
+            }
         }
     }
 

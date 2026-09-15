@@ -25,10 +25,12 @@ import dev.droidpilot.agent.AgentRunner
 import dev.droidpilot.data.AgentSettings
 import dev.droidpilot.observer.AgentAccessibilityService
 import dev.droidpilot.serializer.ScreenSerializer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.widget.ScrollView
 import android.widget.TextView
 
@@ -232,7 +234,7 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val state = service.observe()
+            val state = withContext(Dispatchers.Default) { service.observe() }
             val mode = getString(
                 if (state.isTextUsable) R.string.dump_text_usable else R.string.dump_needs_vision
             )

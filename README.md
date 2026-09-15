@@ -24,7 +24,8 @@ everything has to work with none of them registered.
 | 3 | Trajectory record and replay | written, covered by unit tests |
 | 4 | Planner (LLM) | written, covered by unit tests |
 | 5 | Agent loop and UI | written, covered by unit tests |
-| 6 | Shortcut tools | not started |
+| 6 | Vision escalation | wired, needs a multimodal server to mean anything |
+| 7 | Shortcut tools | not started |
 
 ## Design notes
 
@@ -33,7 +34,10 @@ everything has to work with none of them registered.
   model in the loop.
 - **Vision is the fallback.** Unity and Unreal games expose the entire screen
   as a single `SurfaceView`, which defeats the view tree. When
-  `ScreenState.isTextUsable` is false, the agent escalates to a screenshot.
+  `ScreenState.isTextUsable` is false the observer attaches a screenshot and
+  the planner sends it as `image_data`. This only does something if the server
+  has a multimodal model loaded; against a text model the request still runs
+  and the image is ignored.
 - **`AgentAction` is a sealed interface.** The planner cannot emit free-form
   text. `AskUser` is a first-class action so an unsure planner asks rather
   than tapping at random.
@@ -98,4 +102,4 @@ log and any confirmation prompt are waiting when you come back.
 | Mis-tapping a payment button | Policy denies every action on a checkout screen |
 | Sending a message to the wrong person | Confirmation required before send |
 | Infinite loop, drained battery | Abort on 3 repeats of the same screen hash, 40 step budget, 20% battery floor |
-| Screen contents leaking | Per-app allow list. Messaging and finance stay on the text path |
+| Screen contents leaking | Banking apps are refused outright. `SafetyPolicy` also takes an allow list, which nothing populates yet |

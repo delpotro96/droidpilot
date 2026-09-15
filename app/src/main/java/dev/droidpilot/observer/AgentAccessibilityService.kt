@@ -10,7 +10,9 @@ import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.RequiresApi
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.serializer.ScreenSerializer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -44,18 +46,28 @@ class AgentAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() = Unit
 
-    fun observe(): ScreenState {
+    // Walking the tree is a recursive series of binder calls, so it stays off
+    // whatever thread the caller happens to be on
+    suspend fun observe(): ScreenState = withContext(Dispatchers.Default) {
         val root = rootInActiveWindow
-        return ScreenSerializer.serialize(
+        val state = ScreenSerializer.serialize(
             root = root,
             packageName = root?.packageName?.toString() ?: "unknown",
             activity = lastActivity
         )
+
+        // The listing cannot describe this screen, which is what a game looks
+        // like. A screenshot is the only remaining description
+        if (state.isTextUsable || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            state
+        } else {
+            state.copy(screenshot = captureScreenshot())
+        }
     }
 
     // Only called when the text listing cannot describe the screen, such as in games
     @RequiresApi(Build.VERSION_CODES.R)
-    suspend fun captureScreenshot(): ByteArray? = suspendCancellableCoroutine { cont ->
+    private suspend fun captureScreenshot(): ByteArray? = suspendCancellableCoroutine { cont ->
         takeScreenshot(
             Display.DEFAULT_DISPLAY,
             screenshotExecutor,

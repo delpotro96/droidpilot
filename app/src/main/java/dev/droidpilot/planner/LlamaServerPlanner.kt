@@ -5,8 +5,11 @@ import dev.droidpilot.core.model.Goal
 import dev.droidpilot.core.model.Planner
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.Step
+import android.util.Base64
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -37,7 +40,7 @@ class LlamaServerPlanner(
     override suspend fun next(goal: Goal, state: ScreenState, history: List<Step>): AgentAction {
         val prompt = PlannerPrompt.build(goal, state, history)
 
-        val response = runCatching { complete(prompt) }.getOrElse {
+        val response = runCatching { complete(prompt, state.screenshot) }.getOrElse {
             // Let cancellation unwind instead of turning it into a decision
             if (it is kotlinx.coroutines.CancellationException) throw it
             return AgentAction.Fail("planner unreachable: " + (it.message ?: it.javaClass.simpleName))
@@ -52,10 +55,13 @@ class LlamaServerPlanner(
     // Enqueued rather than executed so cancelling the run actually aborts the
     // request. A blocking execute() would hold the coroutine until the read
     // timeout, which on a CPU-bound model is minutes
-    private suspend fun complete(prompt: String): String = suspendCancellableCoroutine { cont ->
+    private suspend fun complete(
+        prompt: String,
+        screenshot: ByteArray?
+    ): String = suspendCancellableCoroutine { cont ->
         val request = Request.Builder()
             .url(endpoint)
-            .post(payload(prompt).toString().toRequestBody(JSON_MEDIA_TYPE))
+            .post(payload(prompt, screenshot).toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         val call = client.newCall(request)
@@ -78,16 +84,38 @@ class LlamaServerPlanner(
         })
     }
 
-    private fun payload(prompt: String) = JsonObject(
-        mapOf(
-            "prompt" to JsonPrimitive(prompt),
+    private fun payload(prompt: String, screenshot: ByteArray?): JsonObject {
+        val fields = mutableMapOf<String, JsonElement>(
             "grammar" to JsonPrimitive(ActionGrammar.GBNF),
             "temperature" to JsonPrimitive(temperature),
             "n_predict" to JsonPrimitive(MAX_TOKENS),
-            "cache_prompt" to JsonPrimitive(true),
             "stream" to JsonPrimitive(false)
         )
-    )
+
+        if (screenshot == null) {
+            fields["prompt"] = JsonPrimitive(prompt)
+            // Reusing the cached prefix only pays off while the prompt stays text
+            fields["cache_prompt"] = JsonPrimitive(true)
+            return JsonObject(fields)
+        }
+
+        // llama.cpp substitutes the marker with the encoded image. A multimodal
+        // model has to be loaded server side for this to mean anything
+        fields["prompt"] = JsonPrimitive("[img-1]\n" + prompt)
+        fields["image_data"] = JsonArray(
+            listOf(
+                JsonObject(
+                    mapOf(
+                        "id" to JsonPrimitive(1),
+                        "data" to JsonPrimitive(
+                            Base64.encodeToString(screenshot, Base64.NO_WRAP)
+                        )
+                    )
+                )
+            )
+        )
+        return JsonObject(fields)
+    }
 
     private fun readContent(response: Response): String {
         val body = response.body?.string().orEmpty()
