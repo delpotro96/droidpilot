@@ -47,10 +47,18 @@ class ReplayRunner(
                 // Asking is the point of this verdict. Treating it as a block
                 // made any path containing a send or delete button permanently
                 // unrunnable, which is most of what this agent is for
-                is Verdict.RequireConfirm ->
+                is Verdict.RequireConfirm -> {
                     if (!confirm(verdict.reason)) {
                         return Outcome.Blocked(index, "declined: " + verdict.reason)
                     }
+                    // Answering can take minutes, and the user has to leave this
+                    // app to see the question at all. Acting on the screen from
+                    // before they were asked would press whatever is in front of
+                    // them now
+                    if (observe().screenHash != state.screenHash) {
+                        return Outcome.Diverged(index, "screen moved while waiting for approval")
+                    }
+                }
 
                 Verdict.Allow -> Unit
             }

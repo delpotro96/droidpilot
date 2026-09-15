@@ -61,7 +61,7 @@ class AccessibilityExecutor(
 
         if (clickable?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
 
-        requireCoordinatesStillFree(target)
+        requireBlindTapIsTheOnlyOption(target)
         gestureTap(target.bounds, DURATION_TAP)
     }
 
@@ -69,23 +69,25 @@ class AccessibilityExecutor(
         val node = NodeFinder.find(service.rootInActiveWindow, target)
         if (node?.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) == true) return
 
-        requireCoordinatesStillFree(target)
+        requireBlindTapIsTheOnlyOption(target)
         gestureTap(target.bounds, DURATION_LONG_PRESS)
     }
 
     // Falling back to coordinates is what makes a game screen operable at all,
-    // but the same fallback pressed whatever had re-laid out into the old
-    // rectangle. The node lookup failing is precisely the signal that the
-    // screen moved, so before touching the pixels: if something else is sitting
-    // there now, refuse. Only genuinely empty space is fair game
-    private fun requireCoordinatesStillFree(target: UiElement) {
-        val occupant = NodeFinder.occupantAt(service.rootInActiveWindow, target.bounds) ?: return
-
-        val label = occupant.text?.toString()?.takeIf { it.isNotBlank() }
-            ?: occupant.contentDescription?.toString()?.takeIf { it.isNotBlank() }
-
-        check(label == target.label) {
-            "another element took those coordinates: " + (label ?: "unlabelled")
+    // and useless anywhere else: the node lookup failing is precisely the
+    // signal that the screen moved, and pressing the old rectangle then lands
+    // on whatever replaced it.
+    //
+    // An earlier version looked for a node with byte-identical bounds, which a
+    // changed screen almost never has, so it waved everything through. The test
+    // that matters is whether this screen exposes nodes at all. One that does
+    // has re-laid out and is not to be guessed at; one that does not is a
+    // rendered surface where coordinates are the only handle there has ever been
+    private fun requireBlindTapIsTheOnlyOption(target: UiElement) {
+        val root = service.rootInActiveWindow ?: return
+        check(!NodeFinder.hasAnyActionableNode(root)) {
+            "the screen moved and still has nodes, refusing to press " +
+                target.bounds.toShortString() + " blind"
         }
     }
 

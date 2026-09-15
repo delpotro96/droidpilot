@@ -134,7 +134,7 @@ class AgentLoopTest {
     }
 
     @Test
-    fun `a replay whose screen did not move is not handed back to the planner`() = runTest {
+    fun `a replay that never moved the screen fails rather than replanning`() = runTest {
         val store = newStore()
         store.save(storedTap("open settings", "Settings", listOf("Settings", "Profile", "Help")))
 
@@ -146,11 +146,9 @@ class AgentLoopTest {
         val (agent, _) = loop(refusingPlanner, store)
         val result = agent.run(Goal("open settings"))
 
-        assertTrue(result is AgentLoop.Result.Done)
-        assertTrue((result as AgentLoop.Result.Done).replayed)
-        // Unverified, so the path neither gains nor loses standing
-        assertEquals(0, store.all().first().successCount)
-        assertEquals(0, store.all().first().failureCount)
+        // Not reported as success, or the path would stay selected forever
+        assertTrue(result is AgentLoop.Result.Failed)
+        assertEquals(1, store.all().first().failureCount)
     }
 
     @Test

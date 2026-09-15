@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,6 +60,9 @@ object AgentRunner {
     private val job = AtomicReference<Job?>(null)
     private val pendingConfirm = AtomicReference<CompletableDeferred<Boolean>?>(null)
     private val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
+
+    @Volatile
+    private var cancelling = false
 
     val isRunning: Boolean get() = job.get()?.isActive == true
 
@@ -101,6 +105,7 @@ object AgentRunner {
             started.cancel()
             return
         }
+        cancelling = false
         _state.value = State.Running(goalText, listOf(stamp("started: " + goalText)))
         started.invokeOnCompletion { job.compareAndSet(started, null) }
         started.start()
@@ -110,14 +115,18 @@ object AgentRunner {
         pendingConfirm.getAndSet(null)?.complete(approved)
     }
 
+    // The loop is still unwinding when this returns. Clearing the job first
+    // would let a second start win the slot and run two loops against one
+    // accessibility service
     fun cancel(context: Context) {
         // Completing the question with a no would unwind the loop through the
         // decline path and write a refusal the user never gave into the log,
         // which is the only record of what the agent decided. Cancelling the
         // wait is not an answer
+        cancelling = true
         pendingConfirm.getAndSet(null)?.cancel()
         ConfirmPrompt.dismiss(context)
-        job.getAndSet(null)?.cancel()
+        job.get()?.cancel()
         finish("cancelled")
     }
 
@@ -141,8 +150,14 @@ object AgentRunner {
         // dialog it would show is not reachable. The notification is
         ConfirmPrompt.show(context, reason)
 
+        // The notification expires, and with it both of its actions. Without a
+        // matching deadline the run would hold AwaitingConfirm forever, and
+        // isRunning with it, so no later run could start either
         val approved = try {
-            deferred.await()
+            withTimeoutOrNull(CONFIRM_TIMEOUT_MILLIS) { deferred.await() } ?: run {
+                note(goal, "no answer in time, refusing instead of guessing")
+                false
+            }
         } finally {
             pendingConfirm.compareAndSet(deferred, null)
             ConfirmPrompt.dismiss(context)
@@ -153,6 +168,10 @@ object AgentRunner {
     }
 
     private fun note(goal: String, line: String) {
+        // A straggling progress line after cancellation would put the state
+        // back to Running, leaving a spinner over a finished run
+        if (cancelling) return
+
         _state.update { current ->
             val log = current.log + stamp(line)
             when (current) {
@@ -177,4 +196,7 @@ object AgentRunner {
     }
 
     private const val TRAJECTORY_FILE = "trajectories.json"
+
+    // Matches the lifetime of the notification that carries the question
+    private const val CONFIRM_TIMEOUT_MILLIS = 10 * 60 * 1000L
 }

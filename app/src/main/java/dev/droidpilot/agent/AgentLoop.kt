@@ -64,13 +64,18 @@ class AgentLoop(
         val outcome = ReplayRunner(executor, policy, observe, confirm, settleMillis).run(trajectory)
         return when (outcome) {
             is ReplayRunner.Outcome.Completed -> {
-                // Only a run that visibly moved the screen counts for or
-                // against the path. Scoring an unverified run either way would
-                // retire a working path or promote a failing one
-                if (outcome.verified) store.recordOutcome(trajectory.id, success = true)
-                else onProgress("replayed, but the screen did not visibly move")
+                store.recordOutcome(trajectory.id, success = outcome.verified)
 
-                Result.Done("replayed a stored path", replayed = true)
+                if (outcome.verified) {
+                    Result.Done("replayed a stored path", replayed = true)
+                } else {
+                    // Every step ran, so replanning from here could repeat the
+                    // last one. But a path that never moves the screen is doing
+                    // nothing, and reporting that as success left it selected
+                    // forever. It is scored as a failure and retires on its own
+                    onProgress("replayed, but the screen never moved")
+                    Result.Failed("the stored path ran without changing anything")
+                }
             }
 
             is ReplayRunner.Outcome.Diverged -> {
@@ -128,7 +133,7 @@ class AgentLoop(
             // badge ticking over is not the screen moving, and treating it as
             // such meant the agent never acted at all on a chat list
             val current = observe()
-            if (current.structureHash != state.structureHash) {
+            if (!stillAddresses(action, state, current)) {
                 restarts++
                 if (restarts > MAX_RESTARTS) {
                     return Result.Failed("the screen kept changing faster than it could be acted on")
@@ -151,6 +156,27 @@ class AgentLoop(
 
             delay(settleMillis)
         }
+    }
+
+    // An element id means nothing across two observations. A list that gained
+    // three rows renumbers everything below them, and the executor would
+    // faithfully resolve the wrong element by its live bounds and label. What
+    // has to hold is not that the screen is identical, but that the element the
+    // policy vetted is still the one at that index
+    private fun stillAddresses(action: AgentAction, before: ScreenState, after: ScreenState): Boolean {
+        if (before.structureHash != after.structureHash) return false
+
+        val id = when (action) {
+            is AgentAction.Tap -> action.elementId
+            is AgentAction.LongPress -> action.elementId
+            is AgentAction.Input -> action.elementId
+            is AgentAction.Swipe -> action.elementId ?: return true
+            else -> return true
+        }
+
+        val was = before.elements.getOrNull(id) ?: return false
+        val now = after.elements.getOrNull(id) ?: return false
+        return now.label == was.label && now.role == was.role && now.bounds == was.bounds
     }
 
     private companion object {

@@ -39,28 +39,24 @@ object NodeFinder {
         return label == target.label
     }
 
-    // Whatever now occupies the recorded rectangle, label or not. Used to tell
-    // an empty game surface apart from a screen that has re-laid out under us
-    fun occupantAt(root: AccessibilityNodeInfo?, bounds: Rect): AccessibilityNodeInfo? {
-        if (root == null) return null
-        return findByBounds(root, bounds, 0)
-    }
-
-    private fun findByBounds(
-        node: AccessibilityNodeInfo,
-        bounds: Rect,
-        depth: Int
-    ): AccessibilityNodeInfo? {
-        if (depth > MAX_DEPTH) return null
-        if (node.isVisibleToUser) {
-            val own = Rect().also { node.getBoundsInScreen(it) }
-            if (own == bounds) return node
+    // Whether this screen offers anything to press at all. A rendered surface
+    // such as a game exposes nothing, and coordinates are the only handle it
+    // has ever had. Anything else has re-laid out and is not to be guessed at
+    fun hasAnyActionableNode(root: AccessibilityNodeInfo, depth: Int = 0): Boolean {
+        if (depth > MAX_DEPTH) return false
+        if (root.isVisibleToUser && (root.isClickable || root.isEditable || root.isCheckable)) {
+            return true
         }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            findByBounds(child, bounds, depth + 1)?.let { return it }
+        for (i in 0 until root.childCount) {
+            val child = root.getChild(i) ?: continue
+            try {
+                if (hasAnyActionableNode(child, depth + 1)) return true
+            } finally {
+                @Suppress("DEPRECATION")
+                child.recycle()
+            }
         }
-        return null
+        return false
     }
 
     // The visible label is often a child of the node that actually handles the

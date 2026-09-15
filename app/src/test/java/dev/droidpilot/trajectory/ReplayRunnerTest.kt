@@ -84,11 +84,22 @@ class ReplayRunnerTest {
     @Test
     fun `a confirmation is asked during replay rather than blocking it`() = runTest {
         val deletable = screen(hash = "before", elements = listOf(element(0, "삭제")))
-        val outcome = runner(listOf(deletable, after)).run(path("삭제", listOf("삭제")))
+        // Observed once for the step, once after the answer, once to verify
+        val outcome = runner(listOf(deletable, deletable, after)).run(path("삭제", listOf("삭제")))
 
         assertTrue(outcome is ReplayRunner.Outcome.Completed)
         assertEquals(1, asked.size)
         assertEquals(listOf(AgentAction.Tap(0)), performed)
+    }
+
+    @Test
+    fun `a screen that moved while the user was deciding is not pressed`() = runTest {
+        val deletable = screen(hash = "before", elements = listOf(element(0, "삭제")))
+        // The user answered from another app and the screen changed underneath
+        val outcome = runner(listOf(deletable, after)).run(path("삭제", listOf("삭제")))
+
+        assertTrue(outcome is ReplayRunner.Outcome.Diverged)
+        assertTrue(performed.isEmpty())
     }
 
     @Test

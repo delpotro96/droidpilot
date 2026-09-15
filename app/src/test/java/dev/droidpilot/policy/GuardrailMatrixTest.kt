@@ -69,14 +69,55 @@ class GuardrailMatrixTest {
         assertAllDescriptionsAgree("Checkout", "checkout_button", denied, "checkout")
     }
 
+    // Denying a screen costs the whole run, so it takes a phrase that cannot
+    // mean anything else. A single word gets a question instead
     @Test
-    fun `a korean payment button is caught however it is described`() {
-        assertAllDescriptionsAgree("결제하기", "purchase_button_container", denied, "결제")
+    fun `an unambiguous korean checkout phrase denies the screen`() {
+        assertTrue(verdict("결제하기", null) is Verdict.Deny)
+        assertTrue(verdict("지금 결제하기", null) is Verdict.Deny)
+        assertTrue(verdict("구매하기", null) is Verdict.Deny)
     }
 
     @Test
-    fun `an abbreviated pay id is caught`() {
-        assertAllDescriptionsAgree("Pay", "btn_pay", denied, "pay")
+    fun `an ambiguous money word asks rather than denying`() {
+        assertTrue(verdict("Pay", null) is Verdict.RequireConfirm)
+        assertTrue(verdict("Pay 12.00", null) is Verdict.RequireConfirm)
+        assertTrue(verdict("카카오페이로 결제", null) is Verdict.RequireConfirm)
+        assertTrue(verdict(null, "com.app:id/btn_pay") is Verdict.RequireConfirm)
+    }
+
+    // The arithmetic that used to decide these is gone. Every one of them was
+    // allowed through by a coverage ratio below 0.4
+    @Test
+    fun `multi word destructive labels ask for confirmation`() {
+        listOf(
+            "Send message", "메시지 전송", "채팅방 삭제", "모든 데이터 삭제",
+            "Delete conversation", "Permanently delete", "회원 탈퇴하기",
+            "Reset all settings", "Confirm and pay", "확인"
+        ).forEach {
+            val actual = verdict(it, null)
+            assertTrue(
+                it + " should have been questioned, got " + actual,
+                actual is Verdict.RequireConfirm || actual is Verdict.Deny
+            )
+        }
+    }
+
+    // And every one of these used to lock the whole screen at exactly 0.40
+    @Test
+    fun `a short message about money does not deny the screen`() {
+        listOf("결제했어?", "송금했어", "이체 완료").forEach {
+            val actual = policy.check(
+                AgentAction.Tap(1),
+                screen(
+                    elements = listOf(
+                        element(0, it, role = dev.droidpilot.core.model.Role.TEXT, clickable = false),
+                        element(1, "Reply")
+                    )
+                )
+            )
+            assertTrue(it + " should not have denied the screen, got " + actual, actual !is Verdict.Deny)
+        }
     }
 
     @Test
@@ -100,11 +141,11 @@ class GuardrailMatrixTest {
 
     @Test
     fun `a labelled row in a payment history is not a checkout screen`() {
-        // The id names the row, not a control. What the element says decides,
-        // and it says the date of a past payment
+        // Not a denial - that would cost the whole run on a history list. A
+        // question is the right cost for something that mentions money
         val verdict = verdict("2026-09-01 결제 완료", "com.app:id/payment_history_row")
 
-        assertTrue("expected Allow, got " + verdict, verdict == Verdict.Allow)
+        assertTrue("should not deny the screen, got " + verdict, verdict !is Verdict.Deny)
     }
 
     @Test

@@ -47,6 +47,13 @@ class SafetyPolicyTest {
     }
 
     @Test
+    fun `an ok button is questioned, since it is the last thing before the act`() {
+        val state = screen(elements = listOf(element(0, "확인")))
+
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
+    }
+
+    @Test
     fun `leaving a checkout screen is allowed, or the agent is stranded on it`() {
         val state = screen(elements = listOf(element(0, "결제하기")))
 
@@ -91,6 +98,18 @@ class SafetyPolicyTest {
     }
 
     @Test
+    fun `a label on a child of the pressed wrapper is still read`() {
+        val state = screen(
+            elements = listOf(
+                element(0, null, viewId = "com.app:id/row_root", left = 0, top = 0, right = 400, bottom = 120),
+                element(1, "삭제", role = Role.TEXT, clickable = false, left = 20, top = 30, right = 200, bottom = 90)
+            )
+        )
+
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
+    }
+
+    @Test
     fun `a chat message mentioning payment does not lock the screen`() {
         val state = screen(
             elements = listOf(
@@ -116,6 +135,7 @@ class SafetyPolicyTest {
             )
         )
 
+        // Tapping a different row is not an attempt to pay
         assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(1), state))
     }
 
@@ -179,8 +199,8 @@ class SafetyPolicyTest {
     fun `a pay label on a child of the clickable parent is still caught`() {
         val state = screen(
             elements = listOf(
-                element(0, null, viewId = "com.shop:id/pay_row", role = Role.BUTTON),
-                element(1, "결제하기", role = Role.TEXT, clickable = false)
+                element(0, null, viewId = "com.shop:id/pay_row", left = 0, top = 0, right = 400, bottom = 120),
+                element(1, "결제하기", role = Role.TEXT, clickable = false, left = 20, top = 30, right = 300, bottom = 90)
             )
         )
 

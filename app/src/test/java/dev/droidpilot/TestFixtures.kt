@@ -11,9 +11,9 @@ fun element(
     viewId: String? = null,
     role: Role = Role.BUTTON,
     left: Int = 0,
-    top: Int = 0,
+    top: Int = id * ROW_HEIGHT,
     right: Int = 100,
-    bottom: Int = 50,
+    bottom: Int = id * ROW_HEIGHT + ROW_HEIGHT,
     clickable: Boolean = true,
     scrollable: Boolean = false,
     editable: Boolean = false
@@ -44,3 +44,5 @@ fun screen(
     structureHash = structureHash,
     truncated = truncated
 )
+
+private const val ROW_HEIGHT = 50
