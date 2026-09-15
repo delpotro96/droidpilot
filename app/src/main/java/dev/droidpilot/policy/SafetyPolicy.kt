@@ -34,27 +34,64 @@ class SafetyPolicy(
         return null
     }
 
-    // On a checkout screen every tap is dangerous, so the whole screen is denied
+    // On a checkout screen every tap is dangerous, so the whole screen is denied.
+    //
+    // Only button-shaped labels count. Matching every string on screen looked
+    // safer but made the agent useless: one chat message saying "결제했어?" was
+    // enough to lock the whole conversation out
     private fun screenVerdict(state: ScreenState): Verdict? {
-        val labels = state.elements.mapNotNull { it.label }
-        val hit = labels.firstOrNull { label -> PAYMENT_KEYWORDS.any { label.contains(it, ignoreCase = true) } }
-        return hit?.let { Verdict.Deny("looks like a payment screen: " + it) }
+        val hit = state.elements
+            .filter { it.clickable && isButtonShaped(it.label) }
+            .firstOrNull { element -> matches(element.label, PAYMENT_KEYWORDS) }
+
+        return hit?.let { Verdict.Deny("looks like a payment screen: " + it.label) }
     }
 
     private fun actionVerdict(action: AgentAction, state: ScreenState): Verdict {
-        val label = when (action) {
-            is AgentAction.Tap -> state.elements.getOrNull(action.elementId)?.label
-            is AgentAction.LongPress -> state.elements.getOrNull(action.elementId)?.label
+        val element = when (action) {
+            is AgentAction.Tap -> state.elements.getOrNull(action.elementId)
+            is AgentAction.LongPress -> state.elements.getOrNull(action.elementId)
+            is AgentAction.Input -> state.elements.getOrNull(action.elementId)
             else -> null
         } ?: return Verdict.Allow
 
-        IRREVERSIBLE_KEYWORDS.firstOrNull { label.contains(it, ignoreCase = true) }?.let {
-            return Verdict.RequireConfirm("irreversible action: " + label)
+        // Typing into a field named "delete" is not the destructive act, tapping is
+        if (action is AgentAction.Input) return Verdict.Allow
+
+        if (isButtonShaped(element.label) && matches(element.label, IRREVERSIBLE_KEYWORDS)) {
+            return Verdict.RequireConfirm("irreversible action: " + element.label)
         }
         return Verdict.Allow
     }
 
+    // A control carries a short label. Prose that happens to contain the word is
+    // body text, not something the agent is about to press
+    private fun isButtonShaped(label: String?): Boolean =
+        label != null && label.length <= MAX_CONTROL_LABEL
+
+    // Length alone cannot separate "Proceed to checkout" from a chat message of
+    // the same length, so the keyword also has to account for much of the label.
+    // A button is mostly its verb; a sentence that mentions the verb is not
+    private fun matches(label: String?, keywords: List<String>): Boolean {
+        if (label.isNullOrBlank()) return false
+
+        val longest = keywords
+            .filter { label.contains(it, ignoreCase = true) }
+            .maxByOrNull { it.length }
+            ?: return false
+
+        return longest.length.toDouble() / label.trim().length >= MIN_KEYWORD_COVERAGE
+    }
+
     companion object {
+        // Longer than any button label, shorter than a sentence
+        const val MAX_CONTROL_LABEL = 24
+
+        // Tuned against real button labels and chat previews of similar length.
+        // Both thresholds are guesses until they have been seen against a real
+        // view tree
+        const val MIN_KEYWORD_COVERAGE = 0.4
+
         // Banking apps are blocked wholesale, automation has no business there
         val DEFAULT_BLOCKED_PACKAGES = setOf(
             "com.kbstar.kbbank",

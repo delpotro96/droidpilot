@@ -48,9 +48,38 @@ class SafetyPolicyTest {
 
     @Test
     fun `an english checkout screen is caught too`() {
-        val state = screen(elements = listOf(element(0, "Proceed to checkout")))
+        val state = screen(elements = listOf(element(0, "Checkout")))
 
         assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
+    }
+
+    @Test
+    fun `a chat message mentioning payment does not lock the screen`() {
+        val state = screen(
+            elements = listOf(
+                element(0, "Reply"),
+                element(
+                    1,
+                    "결제했어? 나는 아직 안 했는데 오늘 안에 해야 한다더라",
+                    role = Role.TEXT,
+                    clickable = false
+                )
+            )
+        )
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(0), state))
+    }
+
+    @Test
+    fun `a clickable chat row whose preview mentions payment is not a checkout screen`() {
+        val state = screen(
+            elements = listOf(
+                element(0, "카드 등록은 내일 하자고 전해줘", role = Role.LIST),
+                element(1, "New chat")
+            )
+        )
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(1), state))
     }
 
     @Test
@@ -65,6 +94,23 @@ class SafetyPolicyTest {
         val state = screen(elements = listOf(element(0, "Send")))
 
         assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
+    }
+
+    @Test
+    fun `typing a word like delete into a field is not a destructive action`() {
+        val state = screen(
+            elements = listOf(element(0, "Message", role = Role.INPUT, editable = true, clickable = false))
+        )
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Input(0, "delete that file"), state))
+    }
+
+    @Test
+    fun `a long paragraph containing send does not trigger confirmation`() {
+        val longLabel = "Tap here to send the weekly summary to everyone on the list"
+        val state = screen(elements = listOf(element(0, longLabel)))
+
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(0), state))
     }
 
     @Test
