@@ -23,7 +23,7 @@ everything has to work with none of them registered.
 | 2 | Executor and policy | written, not verified on a device |
 | 3 | Trajectory record and replay | written, covered by unit tests |
 | 4 | Planner (LLM) | written, covered by unit tests |
-| 5 | Agent loop | written, covered by unit tests |
+| 5 | Agent loop and UI | written, covered by unit tests |
 | 6 | Shortcut tools | not started |
 
 ## Design notes
@@ -72,10 +72,24 @@ a 4B model viable here.
 
 ## Run
 
+Start a llama.cpp server somewhere the phone can reach:
+
+```
+llama-server -m qwen3-4b-instruct-q4_k_m.gguf --host 0.0.0.0 --port 8080
+```
+
+Then:
+
 1. Install and open the app
 2. `Open accessibility settings` and enable DroidPilot
-3. Press `Dump screen in 5s` and switch to the app you want to inspect
-4. Come back and the screen is rendered as text
+3. Put the server URL in the first field
+4. Type a goal and press `Run`, then switch to the app it should operate
+
+`Dump screen in 5s` renders the current screen as text without running the
+agent, which is the quickest way to see what the planner is given.
+
+A run keeps going after you leave the app, because leaving is the point. The
+log and any confirmation prompt are waiting when you come back.
 
 ## Guardrails
 

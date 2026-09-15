@@ -27,7 +27,8 @@ class AgentLoop(
     private val guardFactory: (Int) -> LoopGuard,
     private val observe: suspend () -> ScreenState,
     private val confirm: suspend (String) -> Boolean,
-    private val settleMillis: Long = DEFAULT_SETTLE_MILLIS
+    private val settleMillis: Long = DEFAULT_SETTLE_MILLIS,
+    private val onProgress: (String) -> Unit = {}
 ) {
 
     sealed interface Result {
@@ -46,6 +47,7 @@ class AgentLoop(
     // which sends the caller on to the planner
     private suspend fun replay(goal: Goal): Result? {
         val trajectory = store.findFor(goal.raw) ?: return null
+        onProgress("replaying a stored path of " + trajectory.steps.size + " steps")
 
         val outcome = ReplayRunner(executor, policy, observe, settleMillis).run(trajectory)
         return when (outcome) {
@@ -56,6 +58,7 @@ class AgentLoop(
 
             is ReplayRunner.Outcome.Diverged -> {
                 store.recordOutcome(trajectory.id, success = false)
+                onProgress("replay diverged at step " + outcome.atStep + ", replanning")
                 null
             }
 
@@ -75,7 +78,9 @@ class AgentLoop(
             guard.record(state)
             guard.abortReason()?.let { return Result.Failed(it) }
 
+            onProgress("thinking on " + state.packageName + " (" + state.elements.size + " elements)")
             val action = planner.next(goal, state, history)
+            onProgress("-> " + action)
 
             when (action) {
                 is AgentAction.Done -> {

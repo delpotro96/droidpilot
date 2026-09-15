@@ -2,9 +2,21 @@
 <resources>
     <string name="app_name">DroidPilot</string>
     <string name="service_name">DroidPilot screen reader</string>
-    <string name="service_description">Reads screen content so the agent can operate apps on your behalf. Nothing leaves the device.</string>
-    <string name="hint_enable_service">Enable the accessibility service, then press the button below.</string>
+    <string name="service_description">Reads screen content so the agent can operate apps on your behalf. Nothing leaves the device unless you point it at a remote planner.</string>
+
+    <string name="hint_enable_service">Enable the accessibility service, then enter a goal.</string>
+    <string name="hint_server">Planner URL, for example http://192.168.0.10:8080</string>
+    <string name="hint_goal">What should it do?</string>
+
+    <string name="action_run">Run</string>
+    <string name="action_cancel">Cancel</string>
     <string name="action_open_settings">Open accessibility settings</string>
     <string name="action_dump">Dump screen in 5s</string>
+
+    <string name="confirm_title">Confirm before continuing</string>
+    <string name="confirm_allow">Allow</string>
+    <string name="confirm_deny">Stop</string>
+
     <string name="error_service_off">Accessibility service is not running.</string>
+    <string name="error_no_goal">Enter a goal first.</string>
 </resources>
