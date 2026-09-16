@@ -139,7 +139,12 @@ class AgentAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "DroidPilot"
-        private const val MAX_EDGE = 1568
+        // Measured against a real game screen on a 4GB card: 1568px took 56
+        // seconds a step, 1024 took 20, 784 took 10. Below 1024 the model
+        // stopped reading the buttons and started inventing them - it named
+        // the countdown timer as a button - so this is the knee rather than
+        // the floor. A forty step run is thirteen minutes at this size
+        private const val MAX_EDGE = 1024
 
         // The platform's own limit on how often a capture may be requested
         private const val RATE_LIMIT_MILLIS = 1100L

@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Call
@@ -35,7 +36,15 @@ class LlamaServerPlanner(
     private val temperature: Double = 0.0
 ) : Planner {
 
-    private val endpoint = baseUrl.trim().trimEnd('/') + "/completion"
+    // The chat endpoint rather than /completion.
+    //
+    // /completion took an image_data array and a [img-N] marker in the prompt,
+    // and against a current server that silently does nothing: the request
+    // succeeds, the marker is left as literal text, and the model answers a
+    // question about a screen it was never shown. It read as a bad model
+    // rather than as a blind one. This path was checked against a real
+    // screenshot and the model read the stage number off it
+    private val endpoint = baseUrl.trim().trimEnd('/') + "/v1/chat/completions"
 
     override suspend fun next(goal: Goal, state: ScreenState, history: List<Step>): AgentAction {
         val prompt = PlannerPrompt.build(goal, state, history)
@@ -84,37 +93,52 @@ class LlamaServerPlanner(
         })
     }
 
-    private fun payload(prompt: String, screenshot: ByteArray?): JsonObject {
-        val fields = mutableMapOf<String, JsonElement>(
+    private fun payload(prompt: String, screenshot: ByteArray?): JsonObject = JsonObject(
+        mapOf(
+            // The grammar travels on the chat endpoint too, and it is what
+            // keeps a small model from answering with prose, three actions at
+            // once, or a risk level it invented
             "grammar" to JsonPrimitive(ActionGrammar.GBNF),
             "temperature" to JsonPrimitive(temperature),
-            "n_predict" to JsonPrimitive(MAX_TOKENS),
-            "stream" to JsonPrimitive(false)
+            "max_tokens" to JsonPrimitive(MAX_TOKENS),
+            "stream" to JsonPrimitive(false),
+            "messages" to JsonArray(listOf(userMessage(prompt, screenshot)))
+        )
+    )
+
+    // The text always goes first. A vision model reads the instruction as
+    // being about the image that follows it, and the goal is the instruction
+    private fun userMessage(prompt: String, screenshot: ByteArray?): JsonObject {
+        val parts = mutableListOf<JsonElement>(
+            JsonObject(
+                mapOf(
+                    "type" to JsonPrimitive("text"),
+                    "text" to JsonPrimitive(prompt)
+                )
+            )
         )
 
-        if (screenshot == null) {
-            fields["prompt"] = JsonPrimitive(prompt)
-            // Reusing the cached prefix only pays off while the prompt stays text
-            fields["cache_prompt"] = JsonPrimitive(true)
-            return JsonObject(fields)
-        }
-
-        // llama.cpp substitutes the marker with the encoded image. A multimodal
-        // model has to be loaded server side for this to mean anything
-        fields["prompt"] = JsonPrimitive("[img-1]\n" + prompt)
-        fields["image_data"] = JsonArray(
-            listOf(
-                JsonObject(
-                    mapOf(
-                        "id" to JsonPrimitive(1),
-                        "data" to JsonPrimitive(
-                            Base64.encodeToString(screenshot, Base64.NO_WRAP)
+        screenshot?.let { bytes ->
+            parts += JsonObject(
+                mapOf(
+                    "type" to JsonPrimitive("image_url"),
+                    "image_url" to JsonObject(
+                        mapOf(
+                            "url" to JsonPrimitive(
+                                DATA_URL_PREFIX + Base64.encodeToString(bytes, Base64.NO_WRAP)
+                            )
                         )
                     )
                 )
             )
+        }
+
+        return JsonObject(
+            mapOf(
+                "role" to JsonPrimitive("user"),
+                "content" to JsonArray(parts)
+            )
         )
-        return JsonObject(fields)
     }
 
     private fun readContent(response: Response): String {
@@ -122,20 +146,27 @@ class LlamaServerPlanner(
         check(response.isSuccessful) { "server returned " + response.code }
 
         return JSON.parseToJsonElement(body)
-            .jsonObject["content"]
+            .jsonObject["choices"]
+            ?.jsonArray?.firstOrNull()
+            ?.jsonObject?.get("message")
+            ?.jsonObject?.get("content")
             ?.jsonPrimitive?.contentOrNull
-            ?: error("response had no content field")
+            ?: error("response had no message content")
     }
 
     companion object {
         private const val MAX_TOKENS = 128
+        private const val DATA_URL_PREFIX = "data:image/png;base64,"
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         private val JSON = Json { ignoreUnknownKeys = true }
 
-        // A phone on wifi and a model thinking on CPU both need room
+        // A screenshot through a vision encoder is the slow part, and on a
+        // small card it runs to the better part of a minute. Measured at just
+        // under a minute for a 1568px image on a 4GB GPU, so the old two
+        // minute ceiling was cutting runs off mid-thought
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.MINUTES)
             .build()
     }
 }
