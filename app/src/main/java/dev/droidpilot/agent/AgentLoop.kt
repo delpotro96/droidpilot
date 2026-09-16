@@ -102,6 +102,7 @@ class AgentLoop(
             val state = observe()
             guard.record(state, previousAction)
             guard.abortReason()?.let { return Result.Failed(it) }
+            undescribed(state)?.let { return it }
 
             onProgress("thinking on " + state.packageName + " (" + state.elements.size + " elements)")
             val action = planner.next(goal, state, history)
@@ -151,11 +152,24 @@ class AgentLoop(
                 beforeHash = state.screenHash,
                 succeeded = outcome.isSuccess
             )
-            if (outcome.isSuccess) recorder.record(action, current)
+            if (outcome.isSuccess) recorder.record(action, current) else recorder.discard()
             previousAction = action
 
             delay(settleMillis)
         }
+    }
+
+    // A screen with nothing to name and nothing to look at cannot be planned
+    // against. The grammar still obliges the planner to answer, and what it
+    // answers with is a coordinate it made up, so the run stops here instead.
+    //
+    // The usual cause is a game running a security solution: FLAG_SECURE makes
+    // every capture come back flat, and the view tree was never going to
+    // describe it
+    private fun undescribed(state: ScreenState): Result? {
+        if (state.isTextUsable || state.screenshot != null) return null
+
+        return Result.Failed("this screen cannot be listed or captured, nothing to plan against")
     }
 
     // An element id means nothing across two observations. A list that gained
@@ -164,6 +178,21 @@ class AgentLoop(
     // has to hold is not that the screen is identical, but that the element the
     // policy vetted is still the one at that index
     private fun stillAddresses(action: AgentAction, before: ScreenState, after: ScreenState): Boolean {
+        // Every verdict was reached about one app. Another one in front of us
+        // means the package rules were applied to a screen that has gone, and a
+        // store or a bank opening mid-thought is exactly what that list exists
+        // to refuse
+        if (before.packageName != after.packageName) return false
+
+        // The grid a point is aimed on is laid over the display, so a display
+        // of another shape is another grid. Neither hash carries bounds, and a
+        // game turning landscape after its portrait splash is the ordinary case
+        if (before.displayWidth != after.displayWidth ||
+            before.displayHeight != after.displayHeight
+        ) {
+            return false
+        }
+
         val id = when (action) {
             is AgentAction.Tap -> action.elementId
             is AgentAction.LongPress -> action.elementId
@@ -172,6 +201,15 @@ class AgentLoop(
             // is still moving. Testing it against a settled screen meant wait
             // could never run in the one situation that calls for it
             is AgentAction.Swipe -> action.elementId ?: return true
+
+            // A point is not an index, so there is nothing to renumber. What
+            // still has to hold is that nothing has appeared to be pressed: a
+            // game exposes no interactive nodes at all, so its structure hash
+            // is constant however hard it animates, and a purchase sheet
+            // opening over it moves that hash and sends us round again
+            is AgentAction.TapAt, is AgentAction.LongPressAt ->
+                return before.structureHash == after.structureHash
+
             else -> return true
         }
 

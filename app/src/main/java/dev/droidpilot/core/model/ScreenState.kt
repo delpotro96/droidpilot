@@ -15,6 +15,15 @@ data class ScreenState(
     // that cannot find what it wants knows to scroll rather than give up
     val truncated: Boolean = false,
     val screenshot: ByteArray? = null,
+
+    // The display as it was when this was observed. The planner aims at a
+    // point on a grid laid over the screenshot, and the screenshot covers the
+    // display, so the press has to be scaled back against the same numbers.
+    // Reading them live at press time meant a rotation between the two put the
+    // finger somewhere else entirely. Zero means unknown, and the executor
+    // falls back to asking the display itself
+    val displayWidth: Int = 0,
+    val displayHeight: Int = 0,
     val capturedAt: Long = System.currentTimeMillis()
 ) {
     // Whether the text listing alone is enough to decide the next action
@@ -32,7 +41,15 @@ data class ScreenState(
     override fun hashCode(): Int = 31 * screenHash.hashCode() + packageName.hashCode()
 
     companion object {
-        const val MIN_CLICKABLE = 3
+        // Three was a guess, and it was wrong in a way that matters now that a
+        // point can be pressed: a dialog offering OK and Cancel reads perfectly
+        // and was being called unusable, which both took a screenshot for
+        // nothing and let the planner aim at a screen it could have named.
+        //
+        // The dump that settled it: a Unity game returns one element, a surface
+        // that is not even clickable. Zero against one separates the two cases
+        // that actually occur, and nothing in between has been observed
+        const val MIN_CLICKABLE = 1
     }
 }
 

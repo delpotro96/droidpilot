@@ -11,14 +11,21 @@ package dev.droidpilot.planner
 // the reason is that the string does not carry the information. The model
 // knows it is pressing a delete button; requiring it to say so is far more
 // reliable than matching the word. The keyword rules stay, but only to
-// escalate what the model played down
+// escalate what the model played down.
+//
+// tapAt and longPressAt exist because a game renders its whole interface into
+// a single surface. There is nothing to number, so the element actions cannot
+// reach it at all; the screenshot the planner is shown in that case had no
+// action that could act on it
 object ActionGrammar {
 
     val GBNF: String = """
 root       ::= "{" ws "\"action\":" ws body ws "}"
-body       ::= tap | longpress | input | swipe | back | home | wait | ask | done | fail
+body       ::= tap | longpress | tapat | longpressat | input | swipe | back | home | wait | ask | done | fail
 tap        ::= "\"tap\"" sep "\"elementId\":" ws int sep "\"risk\":" ws risk
 longpress  ::= "\"longPress\"" sep "\"elementId\":" ws int sep "\"risk\":" ws risk
+tapat      ::= "\"tapAt\"" sep "\"x\":" ws int sep "\"y\":" ws int sep "\"risk\":" ws risk
+longpressat ::= "\"longPressAt\"" sep "\"x\":" ws int sep "\"y\":" ws int sep "\"risk\":" ws risk
 input      ::= "\"input\"" sep "\"elementId\":" ws int sep "\"text\":" ws string
 swipe      ::= "\"swipe\"" sep "\"direction\":" ws direction ( sep "\"elementId\":" ws int )? sep "\"risk\":" ws risk
 back       ::= "\"back\""

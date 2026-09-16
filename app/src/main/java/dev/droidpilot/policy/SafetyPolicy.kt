@@ -8,6 +8,7 @@ import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.UiElement
 import dev.droidpilot.core.model.Verdict
 import dev.droidpilot.core.model.declaredRisk
+import dev.droidpilot.core.model.isBlind
 
 // Evaluated before anything reaches the screen, whatever the planner asked for.
 //
@@ -22,6 +23,15 @@ import dev.droidpilot.core.model.declaredRisk
 // down. They can never lower one, so a model that lies or simply does not know
 // is still caught on the obvious cases, and a model that is honest is not
 // second-guessed by a regex.
+//
+// Only one thing here denies outright, and it is the package. Scanning a whole
+// screen for a checkout phrase was tried and removed: a messenger renders
+// arbitrary text as controls, so a friend typing 결제하기 locked the entire
+// conversation, while a real shopping page - one scroll view filling the window
+// with the button inside it - slipped past every structural test meant to tell
+// the two apart. Five attempts, false positives and false negatives each time.
+// Denying costs the whole run and could not be aimed; asking costs a
+// notification and always can. What used to deny now asks.
 class SafetyPolicy(
     private val blockedPackages: Set<String> = DEFAULT_BLOCKED_PACKAGES,
     private val allowedPackages: Set<String>? = null
@@ -37,10 +47,31 @@ class SafetyPolicy(
         }
 
         packageVerdict(state)?.let { return it }
-        screenVerdict(action, state)?.let { return it }
+        blindVerdict(action, state)?.let { return it }
+        surfaceVerdict(action, state)?.let { return it }
 
         declaredVerdict(action)?.let { return it }
         return keywordVerdict(action, state)
+    }
+
+    // A press aimed at a point exists for screens that expose nothing to
+    // address - a game draws its whole interface into one surface. Where there
+    // is something to name, aiming at a point instead is the planner going
+    // around the only check that reads what is being pressed.
+    //
+    // The test is whether anything actionable is listed, not whether the screen
+    // is text usable. A shopping stream is a video surface with a buy button
+    // beside it: not text usable, yet the button is right there in the listing,
+    // and by point it was reaching that button unread
+    private fun blindVerdict(action: AgentAction, state: ScreenState): Verdict? {
+        if (!action.isBlind) return null
+
+        val nameable = state.elements.any {
+            it.role != Role.SURFACE && (it.clickable || it.editable)
+        }
+        if (!nameable) return null
+
+        return Verdict.Deny("this screen lists what it can do, press one by number")
     }
 
     private fun packageVerdict(state: ScreenState): Verdict? {
@@ -53,16 +84,24 @@ class SafetyPolicy(
         return null
     }
 
-    // A checkout screen is denied outright, but only on a phrase that cannot
-    // mean anything else, and only on something a person could press. Denying
-    // costs the whole run, so a message mentioning a purchase must not do it
-    private fun screenVerdict(action: AgentAction, state: ScreenState): Verdict? {
-        // Leaving is how the agent gets off a payment screen. Denying the way
-        // out strands it there with nothing it is allowed to do
-        if (action is AgentAction.Back || action is AgentAction.Home) return null
+    // The surface a game renders into is left out of the listing, because
+    // pressing it means pressing the middle of the screen. Leaving it out is
+    // not the same as refusing it: the ids are not renumbered, so a planner
+    // that names the missing number gets exactly the press the omission was
+    // meant to prevent
+    private fun surfaceVerdict(action: AgentAction, state: ScreenState): Verdict? {
+        val id = when (action) {
+            is AgentAction.Tap -> action.elementId
+            is AgentAction.LongPress -> action.elementId
+            is AgentAction.Input -> action.elementId
+            is AgentAction.Swipe -> return null
+            else -> return null
+        }
 
-        val hit = state.elements.firstOrNull { isControl(it, state) && matches(it, CHECKOUT_PHRASES) }
-        return hit?.let { Verdict.Deny("checkout screen: " + it.describe) }
+        val target = state.elements.getOrNull(id) ?: return null
+        if (target.role != Role.SURFACE) return null
+
+        return Verdict.Deny("nothing is known about what is drawn there, aim with a point instead")
     }
 
     private fun declaredVerdict(action: AgentAction): Verdict? = when (action.declaredRisk) {
@@ -109,16 +148,6 @@ class SafetyPolicy(
 
     private fun area(element: UiElement): Long =
         element.bounds.width().toLong() * element.bounds.height().toLong()
-
-    // A control is something a person can press. Prose is not, even when the
-    // list row behind it happens to be clickable - which on Android it always
-    // is, and which is why a size test rather than a clickable test decides
-    private fun isControl(element: UiElement, state: ScreenState): Boolean {
-        if (element.clickable || element.role == Role.BUTTON) return true
-        if (element.role != Role.TEXT) return false
-
-        return state.elements.any { it.clickable && wraps(it, element) }
-    }
 
     private fun matches(element: UiElement, keywords: List<String>): Boolean {
         val label = element.label
@@ -182,14 +211,8 @@ class SafetyPolicy(
             "com.android.vending"
         )
 
-        // Unambiguous enough to cost the whole run. A single word never is
-        private val CHECKOUT_PHRASES = listOf(
-            "결제하기", "구매하기", "주문하기", "결제 진행", "결제하시겠",
-            "checkout", "check out", "place order", "complete purchase",
-            "confirm and pay", "pay now", "buy now"
-        )
-
-        // Worth a question before the agent spends anything
+        // Worth a question before the agent spends anything. Korean matches as
+        // a substring, so 결제 covers 결제하기 and 간편결제 alike
         private val MONEY_WORDS = listOf(
             "결제", "송금", "이체", "출금", "카드 등록", "간편결제", "구매", "주문", "구독",
             "pay", "payment", "purchase", "buy", "order", "checkout", "subscribe"

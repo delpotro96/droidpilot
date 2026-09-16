@@ -9,15 +9,33 @@ class TrajectoryRecorder(private val goal: String) {
 
     private val steps = mutableListOf<RecordedStep>()
 
+    // A step that could not be recorded makes every later step unreachable,
+    // because replay would arrive at its screen without having done what came
+    // before. Storing the remainder produced a path that was wrong from its
+    // second step onwards, so one unrecordable step discards the whole run
+    private var broken = false
+
+    // A step that ran and failed is the same problem as one that could not be
+    // written down: replay would reach the next screen without it having
+    // happened. An input that was rejected after the field had already taken
+    // focus left a path that taps the box and presses send on an empty one
+    fun discard() {
+        broken = true
+    }
+
     // Returns false when the action carries no replayable meaning
     fun record(action: AgentAction, state: ScreenState): Boolean {
-        val recorded = convert(action, state) ?: return false
+        val recorded = convert(action, state)
+        if (recorded == null) {
+            broken = true
+            return false
+        }
         steps += RecordedStep(recorded, ScreenSignature.of(state))
         return true
     }
 
     fun build(): Trajectory? {
-        if (steps.isEmpty()) return null
+        if (broken || steps.isEmpty()) return null
         return Trajectory(
             id = UUID.randomUUID().toString(),
             goal = goal,
@@ -38,6 +56,13 @@ class TrajectoryRecorder(private val goal: String) {
             AgentAction.Back -> RecordedAction.Back
             AgentAction.Home -> RecordedAction.Home
             is AgentAction.Wait -> RecordedAction.Wait(action.millis)
+
+            // A screen with nothing to address gives the signature no anchors,
+            // and the fallback then matches on the activity name alone - which
+            // for a game is one name covering every screen it has. A recorded
+            // point would replay onto whatever the game happens to be showing,
+            // so these runs are not stored at all and always replan
+            is AgentAction.TapAt, is AgentAction.LongPressAt -> null
 
             // Terminal actions describe the run, not a step to repeat
             is AgentAction.AskUser, is AgentAction.Done, is AgentAction.Fail -> null

@@ -36,8 +36,8 @@ class ScreenStateTest {
     }
 
     @Test
-    fun `too few actionable elements forces vision`() {
-        val state = screen(elements = listOf(element(0, "Only one")))
+    fun `a screen with nothing to press forces vision`() {
+        val state = screen(elements = listOf(element(0, "Only text", clickable = false)))
 
         assertFalse(state.isTextUsable)
     }
@@ -72,7 +72,7 @@ class ScreenStateTest {
     fun `a truncated listing says so instead of looking complete`() {
         val state = screen(elements = listOf(element(0, "First")), truncated = true)
 
-        assertTrue(ScreenSerializer.toPrompt(state).contains("more elements exist"))
+        assertTrue(ScreenSerializer.toPrompt(state).contains("too long to list"))
     }
 
     @Test

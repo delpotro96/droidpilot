@@ -35,14 +35,18 @@ fun screen(
     elements: List<UiElement> = emptyList(),
     hash: String = "hash",
     structureHash: String = hash,
-    truncated: Boolean = false
+    truncated: Boolean = false,
+    displayWidth: Int = 1080,
+    displayHeight: Int = 2340
 ) = ScreenState(
     packageName = packageName,
     activity = activity,
     elements = elements,
     screenHash = hash,
     structureHash = structureHash,
-    truncated = truncated
+    truncated = truncated,
+    displayWidth = displayWidth,
+    displayHeight = displayHeight
 )
 
 private const val ROW_HEIGHT = 50

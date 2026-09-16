@@ -2,6 +2,7 @@ package dev.droidpilot.planner
 
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Direction
+import dev.droidpilot.core.model.GridPoint
 import dev.droidpilot.core.model.Risk
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -25,6 +26,8 @@ object ActionParser {
         when (val name = obj.string("action") ?: error("missing action field")) {
             "tap" -> AgentAction.Tap(obj.requireInt("elementId"), obj.risk())
             "longPress" -> AgentAction.LongPress(obj.requireInt("elementId"), obj.risk())
+            "tapAt" -> AgentAction.TapAt(obj.requirePoint(), obj.risk())
+            "longPressAt" -> AgentAction.LongPressAt(obj.requirePoint(), obj.risk())
             "input" -> AgentAction.Input(obj.requireInt("elementId"), obj.requireString("text"))
             "swipe" -> AgentAction.Swipe(
                 direction(obj.requireString("direction")),
@@ -93,6 +96,12 @@ object ActionParser {
 
     private fun JsonObject.requireInt(key: String): Int =
         this[key]?.jsonPrimitive?.intOrNull ?: error("missing or non-numeric field: " + key)
+
+    // A model that overshoots the grid meant the edge, not a press off screen.
+    // Clamping keeps a rounding error from becoming a negative coordinate the
+    // gesture dispatcher would silently drop
+    private fun JsonObject.requirePoint(): GridPoint =
+        GridPoint.clamped(requireInt("x"), requireInt("y"))
 
     private fun JsonObject.requireString(key: String): String =
         string(key) ?: error("missing field: " + key)

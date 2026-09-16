@@ -12,6 +12,17 @@ object ScreenSerializer {
     // What the planner is shown
     private const val MAX_ELEMENTS = 80
 
+    // Reserved for the bottom of the screen, where the compose bar, the send
+    // button and the primary action live
+    private const val TAIL_ELEMENTS = 16
+
+    // How many text fields may be pulled back in from the discarded middle
+    private const val EXTRA_EDITABLE = 4
+
+    // Where the bottom of the screen begins. Below this line sit the compose
+    // bar, the send button and the primary action, and they stay there
+    private const val BOTTOM_BAND = 0.85
+
     // How far collection goes before giving up, so a pathological tree cannot
     // stall the walk. Kept above MAX_ELEMENTS so overflow is detectable
     private const val MAX_SCAN = 400
@@ -21,7 +32,7 @@ object ScreenSerializer {
         val collected = mutableListOf<UiElement>()
         if (root != null) walk(root, 0, collected)
 
-        val elements = collected.take(MAX_ELEMENTS)
+        val elements = choose(collected)
         return ScreenState(
             packageName = packageName,
             activity = activity,
@@ -32,6 +43,56 @@ object ScreenSerializer {
             },
             truncated = collected.size > elements.size
         )
+    }
+
+    // Which elements the planner is shown when there are more than it can read.
+    //
+    // Taking the first eighty in tree order looked reasonable until a real chat
+    // screen was dumped: sixty-five elements, every message bubble its own
+    // clickable button, and the text field dead last. A busier conversation
+    // overflows well before the walk reaches the bottom bar, so the one control
+    // needed to reply was the first thing dropped. Screens put their navigation
+    // at the top and their actions at the bottom, and the middle is content, so
+    // both ends are kept and the middle gives way.
+    //
+    // Ids are assigned during the walk, and every lookup is by list index, so
+    // anything removed from the middle has to renumber what follows it.
+    //
+    // Internal rather than private because it is the only part of this file a
+    // test can reach without a live view tree
+    internal fun choose(collected: List<UiElement>): List<UiElement> {
+        if (collected.size <= MAX_ELEMENTS) return collected
+
+        // Chosen by where they sit on screen, not by where they sit in the
+        // tree. Anchored to the end of the tree, one arriving message shifted
+        // every tail id by one, the structure hash moved with it, and an active
+        // conversation burned the restart budget without ever acting. The
+        // compose bar does not move down the screen when a message arrives
+        val floor = collected.maxOf { it.bounds.bottom }
+        val band = (floor * BOTTOM_BAND).toInt()
+        val tail = collected.filter { it.bounds.top >= band }.takeLast(TAIL_ELEMENTS)
+
+        val tailIds = tail.mapTo(mutableSetOf()) { it.id }
+        val head = collected.asSequence()
+            .filter { it.id !in tailIds }
+            .take(MAX_ELEMENTS - tail.size)
+            .toList()
+        val kept = (head + tail).toMutableList()
+
+        // A form long enough to overflow can still hold its field in the middle,
+        // and a screen the agent cannot type into is not one it can finish.
+        // Capped, or a page of three hundred inputs re-adds every one of them
+        // and the listing the cap exists to bound is unbounded again
+        val keptIds = kept.mapTo(mutableSetOf()) { it.id }
+        collected.asSequence()
+            .filter { it.editable && it.id !in keptIds }
+            .take(EXTRA_EDITABLE)
+            .forEach { kept += it }
+
+        return kept.sortedBy { it.id }
+            .mapIndexed { index, element ->
+                if (element.id == index) element else element.copy(id = index)
+            }
     }
 
     private fun walk(node: AccessibilityNodeInfo, depth: Int, out: MutableList<UiElement>) {
@@ -120,11 +181,19 @@ object ScreenSerializer {
     fun toPrompt(state: ScreenState): String = buildString {
         append("app: ").append(state.packageName).append("\n")
         state.activity?.let { append("screen: ").append(it).append("\n") }
-        if (state.elements.isEmpty()) {
-            append("(no elements - vision mode required)\n")
+        // A game lists exactly one element, the surface it renders into.
+        // Offered as a numbered entry the planner reads it as something to
+        // press, and pressing it is the middle of the screen. It is never
+        // addressable, so it is never listed
+        val addressable = state.elements.filter { it.role != Role.SURFACE }
+
+        if (addressable.isEmpty()) {
+            append("(this screen renders its interface and exposes nothing to address")
+            append(" - vision mode required, aim at the screenshot with tapAt)\n")
             return@buildString
         }
-        state.elements.forEach { e ->
+
+        addressable.forEach { e ->
             append("[").append(e.id).append("] ")
             append(e.role.name.lowercase())
             e.label?.let { append(" \"").append(it.take(60)).append("\"") }
@@ -137,7 +206,7 @@ object ScreenSerializer {
             append("\n")
         }
         if (state.truncated) {
-            append("(more elements exist below - swipe to reach them)\n")
+            append("(the middle of this screen was too long to list - swipe to reach it)\n")
         }
     }
 }

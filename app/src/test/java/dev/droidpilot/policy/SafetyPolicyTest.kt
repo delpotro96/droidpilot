@@ -34,7 +34,7 @@ class SafetyPolicyTest {
     }
 
     @Test
-    fun `every press on a checkout screen is denied, not just the pay button`() {
+    fun `on a checkout screen the pay button asks and the way out does not`() {
         val state = screen(
             elements = listOf(
                 element(0, "뒤로"),
@@ -42,8 +42,13 @@ class SafetyPolicyTest {
             )
         )
 
-        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
-        assertTrue(policy.check(AgentAction.Tap(1), state) is Verdict.Deny)
+        // Denying every press on any screen holding a checkout phrase was
+        // tried and removed: a messenger renders arbitrary text as controls,
+        // so one friend typing it locked the conversation, while a real
+        // shopping page kept the button inside a full window scroller and
+        // slipped past every structural test meant to tell them apart
+        assertEquals(Verdict.Allow, policy.check(AgentAction.Tap(0), state))
+        assertTrue(policy.check(AgentAction.Tap(1), state) is Verdict.RequireConfirm)
     }
 
     @Test
@@ -78,7 +83,7 @@ class SafetyPolicyTest {
             elements = listOf(element(0, "Checkout", viewId = "com.shop:id/checkout_button"))
         )
 
-        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
     }
 
     @Test
@@ -94,7 +99,7 @@ class SafetyPolicyTest {
     fun `an english checkout screen is caught too`() {
         val state = screen(elements = listOf(element(0, "Checkout")))
 
-        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
     }
 
     @Test
@@ -176,7 +181,7 @@ class SafetyPolicyTest {
     fun `a wordy checkout button is not skipped for being long`() {
         val state = screen(elements = listOf(element(0, "Confirm and pay 1,299.00")))
 
-        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
     }
 
     @Test
@@ -253,7 +258,7 @@ class SafetyPolicyTest {
             )
         )
 
-        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.Deny)
+        assertTrue(policy.check(AgentAction.Tap(0), state) is Verdict.RequireConfirm)
     }
 
     @Test

@@ -41,13 +41,17 @@ class ReplayRunnerTest {
         )
     }
 
-    private fun path(label: String, anchors: List<String>) = Trajectory(
+    private fun path(
+        label: String,
+        anchors: List<String>,
+        packageName: String = "com.example.app"
+    ) = Trajectory(
         id = "t",
         goal = "do it",
         steps = listOf(
             RecordedStep(
                 RecordedAction.Tap(ElementRef(label, Role.BUTTON, 0, 0, 100, 50)),
-                ScreenSignature("com.example.app", "MainActivity", anchors)
+                ScreenSignature(packageName, "MainActivity", anchors)
             )
         ),
         recordedAt = 0L
@@ -113,8 +117,16 @@ class ReplayRunnerTest {
 
     @Test
     fun `a denied screen blocks the replay without asking`() = runTest {
-        val checkout = screen(hash = "before", elements = listOf(element(0, "결제하기")))
-        val outcome = runner(listOf(checkout, after)).run(path("결제하기", listOf("결제하기")))
+        // A blocked package is the only thing that denies outright now. Label
+        // matching was tried and could not be aimed - it locked chat screens
+        // and still missed a real shopping page
+        val bank = screen(
+            packageName = "viva.republica.toss",
+            hash = "before",
+            elements = listOf(element(0, "송금하기"))
+        )
+        val outcome = runner(listOf(bank, after))
+            .run(path("송금하기", listOf("송금하기"), packageName = "viva.republica.toss"))
 
         assertTrue(outcome is ReplayRunner.Outcome.Blocked)
         assertTrue(asked.isEmpty())

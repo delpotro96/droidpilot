@@ -46,7 +46,6 @@ class GuardrailMatrixTest {
         }
     }
 
-    private val denied: (Verdict) -> Boolean = { it is Verdict.Deny }
     private val confirmed: (Verdict) -> Boolean = { it is Verdict.RequireConfirm }
 
     @Test
@@ -66,16 +65,17 @@ class GuardrailMatrixTest {
 
     @Test
     fun `an english checkout button is caught however it is described`() {
-        assertAllDescriptionsAgree("Checkout", "checkout_button", denied, "checkout")
+        assertAllDescriptionsAgree("Checkout", "checkout_button", confirmed, "checkout")
     }
 
-    // Denying a screen costs the whole run, so it takes a phrase that cannot
-    // mean anything else. A single word gets a question instead
+    // Every one of these used to deny the whole screen. Nothing denies on a
+    // label any more, because the same rule locked a conversation the moment a
+    // friend typed one of these words. They ask instead
     @Test
-    fun `an unambiguous korean checkout phrase denies the screen`() {
-        assertTrue(verdict("결제하기", null) is Verdict.Deny)
-        assertTrue(verdict("지금 결제하기", null) is Verdict.Deny)
-        assertTrue(verdict("구매하기", null) is Verdict.Deny)
+    fun `a korean checkout phrase is asked about`() {
+        assertTrue(verdict("결제하기", null) is Verdict.RequireConfirm)
+        assertTrue(verdict("지금 결제하기", null) is Verdict.RequireConfirm)
+        assertTrue(verdict("구매하기", null) is Verdict.RequireConfirm)
     }
 
     @Test
@@ -152,6 +152,6 @@ class GuardrailMatrixTest {
     fun `an unlabelled control still falls back to its id`() {
         val verdict = verdict(null, "com.app:id/checkout_button")
 
-        assertTrue("expected Deny, got " + verdict, verdict is Verdict.Deny)
+        assertTrue("expected a question, got " + verdict, verdict is Verdict.RequireConfirm)
     }
 }

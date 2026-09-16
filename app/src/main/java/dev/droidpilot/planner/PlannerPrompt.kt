@@ -2,6 +2,7 @@ package dev.droidpilot.planner
 
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Goal
+import dev.droidpilot.core.model.GridPoint
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.Step
 import dev.droidpilot.serializer.ScreenSerializer
@@ -31,6 +32,13 @@ object PlannerPrompt {
                             dialog, the risk is whatever the dialog does.
           Declaring it does not stop you - it asks the user first. Guessing
           "none" to avoid the question is the one thing you must not do.
+        - Some screens draw their whole interface and expose no elements to
+          number, which a game always does. There you are given a screenshot
+          instead, and you press with tapAt using a 0 to 1000 grid: x runs left
+          to right, y runs top to bottom, so the centre is 500,500. Nothing on
+          that screen can be read as text, which means the risk you declare is
+          the only thing standing between the goal and a purchase. Read the
+          button before you press it.
         - If the screen is still loading, emit wait rather than pressing.
         - If the goal is already achieved, emit done.
         - If the screen does not let you make progress, emit back or swipe.
@@ -67,6 +75,8 @@ object PlannerPrompt {
     private fun describe(action: AgentAction): String = when (action) {
         is AgentAction.Tap -> "tapped element " + action.elementId
         is AgentAction.LongPress -> "long pressed element " + action.elementId
+        is AgentAction.TapAt -> "tapped " + at(action.point)
+        is AgentAction.LongPressAt -> "long pressed " + at(action.point)
         is AgentAction.Input -> "typed into element " + action.elementId
         is AgentAction.Swipe -> "swiped " + action.direction.name.lowercase()
         AgentAction.Back -> "pressed back"
@@ -76,4 +86,6 @@ object PlannerPrompt {
         is AgentAction.Done -> "finished: " + action.summary
         is AgentAction.Fail -> "gave up: " + action.reason
     }
+
+    private fun at(point: GridPoint): String = point.x.toString() + "," + point.y
 }

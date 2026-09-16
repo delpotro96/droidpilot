@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Executor
 import dev.droidpilot.core.model.Goal
+import dev.droidpilot.core.model.GridPoint
 import dev.droidpilot.core.model.Planner
 import dev.droidpilot.core.model.Role
 import dev.droidpilot.core.model.ScreenState
@@ -77,14 +78,20 @@ class AgentLoopTest {
         return agent to store
     }
 
-    private fun storedTap(goal: String, label: String, anchors: List<String>, activity: String? = "MainActivity") =
+    private fun storedTap(
+        goal: String,
+        label: String,
+        anchors: List<String>,
+        activity: String? = "MainActivity",
+        packageName: String = "com.example.app"
+    ) =
         Trajectory(
             id = "t1",
             goal = goal,
             steps = listOf(
                 RecordedStep(
                     RecordedAction.Tap(ElementRef(label, Role.BUTTON, 0, 0, 100, 50)),
-                    ScreenSignature("com.example.app", activity, anchors)
+                    ScreenSignature(packageName, activity, anchors)
                 )
             ),
             recordedAt = 0L
@@ -172,10 +179,13 @@ class AgentLoopTest {
 
     @Test
     fun `a denied action stops the run and never reaches the screen`() = runTest {
-        val checkout = screen(elements = listOf(element(0, "결제하기"), element(1, "취소")))
-        val (agent, _) = loop(scriptedPlanner(AgentAction.Tap(0)), screens = listOf(checkout))
+        val bank = screen(
+            packageName = "viva.republica.toss",
+            elements = listOf(element(0, "송금하기"), element(1, "취소"))
+        )
+        val (agent, _) = loop(scriptedPlanner(AgentAction.Tap(0)), screens = listOf(bank))
 
-        val result = agent.run(Goal("buy it"))
+        val result = agent.run(Goal("send money"))
 
         assertTrue(result is AgentLoop.Result.Blocked)
         assertTrue(performed.isEmpty())
@@ -236,6 +246,69 @@ class AgentLoopTest {
     }
 
     @Test
+    fun `a screen that can neither be listed nor captured stops the run`() = runTest {
+        val refusingPlanner = object : Planner {
+            override suspend fun next(goal: Goal, state: ScreenState, history: List<Step>): AgentAction =
+                throw AssertionError("nothing describes this screen, asking is inventing")
+        }
+
+        // A game behind a security solution: no elements to name, and every
+        // capture comes back flat so the observer discards it
+        val (agent, _) = loop(refusingPlanner, screens = listOf(screen(elements = emptyList())))
+        val result = agent.run(Goal("collect the daily reward"))
+
+        assertTrue(result is AgentLoop.Result.Failed)
+        assertTrue((result as AgentLoop.Result.Failed).reason.contains("cannot be listed or captured"))
+        assertTrue(performed.isEmpty())
+    }
+
+    @Test
+    fun `a point is not pressed once another app has come to the front`() = runTest {
+        val game = screen(
+            packageName = "com.blackdust.redblue",
+            elements = listOf(
+                element(0, "Game view", role = Role.SURFACE, clickable = false)
+            )
+        )
+        // The planner thinks for a minute, and a purchase sheet arrives while
+        // it does. The package rules were applied to the game, not to this
+        val store = screen(
+            packageName = "com.android.vending",
+            hash = "store",
+            elements = listOf(element(0, "구매"), element(1, "취소"))
+        )
+
+        val (agent, _) = loop(
+            scriptedPlanner(AgentAction.TapAt(GridPoint(500, 900)), AgentAction.Done("done")),
+            screens = listOf(game, store)
+        )
+        agent.run(Goal("collect the daily reward"))
+
+        assertTrue(performed.isEmpty())
+    }
+
+    @Test
+    fun `a point is not pressed after the display has turned`() = runTest {
+        val portrait = screen(
+            packageName = "com.blackdust.redblue",
+            elements = listOf(element(0, "Game view", role = Role.SURFACE, clickable = false)),
+            displayWidth = 1080,
+            displayHeight = 2340
+        )
+        // A game showing its splash portrait and then forcing landscape moves
+        // neither hash, and the grid it was aimed on is no longer the display
+        val landscape = portrait.copy(displayWidth = 2340, displayHeight = 1080)
+
+        val (agent, _) = loop(
+            scriptedPlanner(AgentAction.TapAt(GridPoint(500, 900)), AgentAction.Done("done")),
+            screens = listOf(portrait, landscape)
+        )
+        agent.run(Goal("collect the daily reward"))
+
+        assertTrue(performed.isEmpty())
+    }
+
+    @Test
     fun `a failing run is not stored as a path`() = runTest {
         val (agent, store) = loop(scriptedPlanner(AgentAction.Tap(0), AgentAction.Fail("dead end")))
 
@@ -246,12 +319,20 @@ class AgentLoopTest {
 
     @Test
     fun `replay still passes through the policy`() = runTest {
-        val checkout = screen(elements = listOf(element(0, "결제하기"), element(1, "취소")))
+        val bank = screen(
+            packageName = "viva.republica.toss",
+            elements = listOf(element(0, "송금하기"), element(1, "취소"))
+        )
         val store = newStore()
-        store.save(storedTap("buy it", "결제하기", listOf("결제하기", "취소")))
+        store.save(
+            storedTap(
+                "send money", "송금하기", listOf("송금하기", "취소"),
+                packageName = "viva.republica.toss"
+            )
+        )
 
-        val (agent, _) = loop(scriptedPlanner(AgentAction.Done("nope")), store, screens = listOf(checkout))
-        val result = agent.run(Goal("buy it"))
+        val (agent, _) = loop(scriptedPlanner(AgentAction.Done("nope")), store, screens = listOf(bank))
+        val result = agent.run(Goal("send money"))
 
         assertTrue(result is AgentLoop.Result.Blocked)
         assertTrue(performed.isEmpty())

@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Direction
 import dev.droidpilot.core.model.Executor
+import dev.droidpilot.core.model.GridPoint
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.UiElement
 import kotlinx.coroutines.CancellationException
@@ -38,6 +39,8 @@ class AccessibilityExecutor(
         when (action) {
             is AgentAction.Tap -> tap(element(action.elementId, state))
             is AgentAction.LongPress -> longPress(element(action.elementId, state))
+            is AgentAction.TapAt -> gesturePoint(action.point, state, DURATION_TAP)
+            is AgentAction.LongPressAt -> gesturePoint(action.point, state, DURATION_LONG_PRESS)
             is AgentAction.Input -> input(element(action.elementId, state), action.text)
             is AgentAction.Swipe -> swipe(action.direction, action.elementId?.let { element(it, state) }, state)
             AgentAction.Back -> global(AccessibilityService.GLOBAL_ACTION_BACK)
@@ -99,6 +102,25 @@ class AccessibilityExecutor(
             "the element is gone and the screen still has nodes, refusing to press " +
                 target.bounds.toShortString() + " blind"
         }
+    }
+
+    // The grid the planner aims on is laid over the display, because the
+    // display is what the screenshot it was shown covers.
+    //
+    // The size comes from the observation rather than from the display now. A
+    // game turning landscape after its portrait splash changes neither hash,
+    // so a point chosen against 1080 by 2340 was being scaled against 2340 by
+    // 1080 and landing nowhere near what the model looked at
+    private suspend fun gesturePoint(point: GridPoint, state: ScreenState, durationMs: Long) {
+        val metrics = service.resources.displayMetrics
+        val width = state.displayWidth.takeIf { it > 0 } ?: metrics.widthPixels
+        val height = state.displayHeight.takeIf { it > 0 } ?: metrics.heightPixels
+        val (x, y) = point.toPixels(width, height)
+
+        // The policy has already refused this on any screen that lists its
+        // elements, so there is nothing here to cross-check the point against.
+        // The declared risk was the gate
+        dispatch(Path().apply { moveTo(x, y) }, durationMs)
     }
 
     private fun input(target: UiElement, text: String) {
