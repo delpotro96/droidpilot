@@ -183,11 +183,16 @@ class AgentLoopTest {
             packageName = "viva.republica.toss",
             elements = listOf(element(0, "송금하기"), element(1, "취소"))
         )
-        val (agent, _) = loop(scriptedPlanner(AgentAction.Tap(0)), screens = listOf(bank))
+        // Kept choosing it, so the refusals run out and the run ends
+        val stubborn = object : Planner {
+            override suspend fun next(goal: Goal, state: ScreenState, history: List<Step>) =
+                AgentAction.Tap(0)
+        }
+        val (agent, _) = loop(stubborn, screens = listOf(bank))
 
         val result = agent.run(Goal("send money"))
 
-        assertTrue(result is AgentLoop.Result.Blocked)
+        assertTrue("got " + result, result is AgentLoop.Result.Blocked)
         assertTrue(performed.isEmpty())
     }
 
@@ -334,7 +339,7 @@ class AgentLoopTest {
         val (agent, _) = loop(scriptedPlanner(AgentAction.Done("nope")), store, screens = listOf(bank))
         val result = agent.run(Goal("send money"))
 
-        assertTrue(result is AgentLoop.Result.Blocked)
+        assertTrue("got " + result, result is AgentLoop.Result.Blocked)
         assertTrue(performed.isEmpty())
         assertEquals(0, store.all().first { it.id == "t1" }.failureCount)
     }

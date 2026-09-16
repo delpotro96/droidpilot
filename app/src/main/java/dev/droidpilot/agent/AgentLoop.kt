@@ -111,32 +111,53 @@ class AgentLoop(
             guard.abortReason()?.let { return Result.Failed(it) }
             undescribed(state)?.let { return it }
 
-            onProgress("thinking on " + state.packageName + " (" + state.elements.size + " elements)")
+            // A refused choice is a wrong one, not a dangerous one: nothing
+            // reached the screen, so the screen has not moved and there is
+            // nothing to observe again. The refusal goes into the history and
+            // the planner picks again from the same screen.
+            //
+            // Ending the run on the first refusal meant one misread killed it.
+            // Observing again instead made the loop guard see a screen that
+            // never changed and call the run stuck, which is how a refusal
+            // ended a run by a different route
+            var action: AgentAction
+            var refused = 0
+            while (true) {
+                onProgress("thinking on " + state.packageName + " (" + state.elements.size + " elements)")
 
-            // The planner talks over the network to a machine that may not be
-            // there. Its own client has timeouts, but a stall anywhere in that
-            // stack used to hold the whole run with no upper bound
-            val action = withTimeoutOrNull(PLANNER_TIMEOUT_MILLIS) {
-                planner.next(goal, state, history)
-            } ?: return Result.Failed("the planner did not answer in time")
-            onProgress("-> " + action)
+                // The planner talks over the network to a machine that may not
+                // be there. Its own client has timeouts, but a stall anywhere
+                // in that stack used to hold the whole run with no upper bound
+                action = withTimeoutOrNull(PLANNER_TIMEOUT_MILLIS) {
+                    planner.next(goal, state, history)
+                } ?: return Result.Failed("the planner did not answer in time")
+                onProgress("-> " + action)
 
-            when (action) {
-                is AgentAction.Done -> {
-                    if (mayStore) recorder.build()?.let { store.save(it) }
-                    return Result.Done(action.summary, replayed = false)
+                when (action) {
+                    is AgentAction.Done -> {
+                        if (mayStore) recorder.build()?.let { store.save(it) }
+                        return Result.Done(action.summary, replayed = false)
+                    }
+
+                    is AgentAction.Fail -> return Result.Failed(action.reason)
+                    is AgentAction.AskUser -> return Result.NeedsUser(action.question)
+                    else -> Unit
                 }
 
-                is AgentAction.Fail -> return Result.Failed(action.reason)
-                is AgentAction.AskUser -> return Result.NeedsUser(action.question)
-                else -> Unit
-            }
+                val verdict = policy.check(action, state)
+                if (verdict is Verdict.Deny) {
+                    refused++
+                    if (refused > MAX_REFUSALS) return Result.Blocked(verdict.reason)
 
-            when (val verdict = policy.check(action, state)) {
-                is Verdict.Deny -> return Result.Blocked(verdict.reason)
-                is Verdict.RequireConfirm ->
-                    if (!confirm(verdict.reason)) return Result.Blocked("declined: " + verdict.reason)
-                Verdict.Allow -> Unit
+                    onProgress("refused: " + verdict.reason)
+                    history += Step(action, state.screenHash, succeeded = false)
+                    continue
+                }
+
+                if (verdict is Verdict.RequireConfirm && !confirm(verdict.reason)) {
+                    return Result.Blocked("declined: " + verdict.reason)
+                }
+                break
             }
 
             // The planner round trip can take minutes on a CPU bound model.
@@ -244,6 +265,10 @@ class AgentLoop(
         // A screen that will not hold still for one round trip is not one the
         // agent can operate, and spinning on it burns the whole budget silently
         const val MAX_RESTARTS = 3
+
+        // A planner that keeps choosing something the policy will not allow is
+        // not going to find its way, but one bad guess should not end a run
+        const val MAX_REFUSALS = 3
 
         // Reading a tree is milliseconds when it works at all
         const val OBSERVE_TIMEOUT_MILLIS = 20_000L

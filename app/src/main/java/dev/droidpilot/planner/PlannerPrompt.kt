@@ -35,7 +35,6 @@ object PlannerPrompt {
           thing you must not do.
         - Goal already done: done. Cannot tell which element: ask.
           Impossible here: fail. Nothing to press: back.
-        - Only emit wait if the screen is visibly still loading.
     """.trimIndent()
 
     // Added only where it applies. Carried on every screen it made the rules
@@ -55,7 +54,8 @@ object PlannerPrompt {
         goal: Goal,
         state: ScreenState,
         history: List<Step>,
-        apps: List<InstalledApp> = emptyList()
+        apps: List<InstalledApp> = emptyList(),
+        ownPackage: String? = null
     ): String = buildString {
         append(SYSTEM).append('\n')
         if (!state.isTextUsable) append('\n').append(VISION).append('\n')
@@ -87,7 +87,16 @@ object PlannerPrompt {
         }
 
         append("Current screen:\n")
-        append(ScreenSerializer.toPrompt(state))
+        if (state.packageName == ownPackage) {
+            // Shown its own interface, the planner read the goal box as
+            // somewhere to type the goal, pressed it, and found the screen
+            // unchanged. It did that until the budget ran out
+            append("app: ").append(state.packageName).append('\n')
+            append("(this is the agent's own screen and none of it belongs")
+            append(" to the goal - open the app you need)\n")
+        } else {
+            append(ScreenSerializer.toPrompt(state))
+        }
         append('\n')
 
         append("Budget: ").append(goal.stepBudget - history.size).append(" actions left\n\n")

@@ -37,7 +37,10 @@ class LlamaServerPlanner(
     private val temperature: Double = 0.0,
     // Read lazily rather than passed in, because walking every installed
     // package costs more than a run that never needs to open anything
-    private val apps: () -> List<InstalledApp> = ::emptyList
+    private val apps: () -> List<InstalledApp> = ::emptyList,
+    // Our own package, so the planner is never shown our interface as
+    // something to operate
+    private val ownPackage: String? = null
 ) : Planner {
 
     // The chat endpoint rather than /completion.
@@ -51,9 +54,12 @@ class LlamaServerPlanner(
     private val endpoint = baseUrl.trim().trimEnd('/') + CHAT_PATH
 
     override suspend fun next(goal: Goal, state: ScreenState, history: List<Step>): AgentAction {
-        val prompt = PlannerPrompt.build(goal, state, history, apps())
+        val prompt = PlannerPrompt.build(goal, state, history, apps(), ownPackage)
+        val grammar =
+            if (state.packageName == ownPackage) ActionGrammar.GBNF_LEAVE_ONLY
+            else ActionGrammar.GBNF
 
-        val response = runCatching { complete(prompt, state.screenshot) }.getOrElse {
+        val response = runCatching { complete(prompt, state.screenshot, grammar) }.getOrElse {
             // Let cancellation unwind instead of turning it into a decision
             if (it is kotlinx.coroutines.CancellationException) throw it
             return AgentAction.Fail(unreachable(it))
@@ -94,11 +100,12 @@ class LlamaServerPlanner(
     // timeout, which on a CPU-bound model is minutes
     private suspend fun complete(
         prompt: String,
-        screenshot: ByteArray?
+        screenshot: ByteArray?,
+        grammar: String
     ): String = suspendCancellableCoroutine { cont ->
         val request = Request.Builder()
             .url(endpoint)
-            .post(payload(prompt, screenshot).toString().toRequestBody(JSON_MEDIA_TYPE))
+            .post(payload(prompt, screenshot, grammar).toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         val call = client.newCall(request)
@@ -121,12 +128,12 @@ class LlamaServerPlanner(
         })
     }
 
-    private fun payload(prompt: String, screenshot: ByteArray?): JsonObject = JsonObject(
+    private fun payload(prompt: String, screenshot: ByteArray?, grammar: String): JsonObject = JsonObject(
         mapOf(
             // The grammar travels on the chat endpoint too, and it is what
             // keeps a small model from answering with prose, three actions at
             // once, or a risk level it invented
-            "grammar" to JsonPrimitive(ActionGrammar.GBNF),
+            "grammar" to JsonPrimitive(grammar),
             "temperature" to JsonPrimitive(temperature),
             "max_tokens" to JsonPrimitive(MAX_TOKENS),
             "stream" to JsonPrimitive(false),

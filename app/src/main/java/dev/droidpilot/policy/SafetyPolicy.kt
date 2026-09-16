@@ -34,7 +34,10 @@ import dev.droidpilot.core.model.isBlind
 // notification and always can. What used to deny now asks.
 class SafetyPolicy(
     private val blockedPackages: Set<String> = DEFAULT_BLOCKED_PACKAGES,
-    private val allowedPackages: Set<String>? = null
+    private val allowedPackages: Set<String>? = null,
+    // Our own interface. Pressing anything on it is the run operating itself,
+    // which at best types the goal into the goal box and at worst presses stop
+    private val ownPackage: String? = null
 ) : Policy {
 
     override fun check(action: AgentAction, state: ScreenState): Verdict {
@@ -47,6 +50,7 @@ class SafetyPolicy(
         }
 
         launchVerdict(action)?.let { return it }
+        ownScreenVerdict(action, state)?.let { return it }
         packageVerdict(state)?.let { return it }
         blindVerdict(action, state)?.let { return it }
         surfaceVerdict(action, state)?.let { return it }
@@ -88,6 +92,16 @@ class SafetyPolicy(
             return Verdict.Deny("app not on the allow list: " + action.packageName)
         }
         return null
+    }
+
+    // Leaving is always allowed, or a planner that lands here has no legal
+    // move and the run dies on its own screen
+    private fun ownScreenVerdict(action: AgentAction, state: ScreenState): Verdict? {
+        if (ownPackage == null || state.packageName != ownPackage) return null
+        return when (action) {
+            is AgentAction.Launch, AgentAction.Back, AgentAction.Home -> null
+            else -> Verdict.Deny("this is the agent's own screen, open the app the goal needs")
+        }
     }
 
     private fun packageVerdict(state: ScreenState): Verdict? {
