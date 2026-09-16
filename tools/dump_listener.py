@@ -184,6 +184,21 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps({"error": str(failure)}).encode("utf-8")
             status = 502
 
+        # The decision itself, and the screen it was made on. Byte counts said
+        # the exchange was healthy while the agent went nowhere at all
+        try:
+            sent = json.loads(raw)
+            text = sent["messages"][0]["content"][0]["text"]
+            screen = text.split("Current screen:", 1)[-1].strip().splitlines()
+            print("          screen: %s" % " | ".join(x.strip() for x in screen[:6]))
+            answer = json.loads(body)["choices"][0]["message"]
+            chose = answer.get("content") or answer.get("reasoning_content") or ""
+            print("          chose : %s" % " ".join(chose.split()))
+            with open(os.path.join(OUT_DIR, "last-planner.txt"), "w", encoding="utf-8") as f:
+                f.write(text + "\n\n=== ANSWER ===\n" + chose)
+        except Exception as oops:
+            print("          (could not read exchange: %s)" % oops)
+
         print("          <- %d in %.1fs, %d bytes" % (status, time.time() - started, len(body)))
         sys.stdout.flush()
 
