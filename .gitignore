@@ -16,3 +16,7 @@ models/
 
 # Screen dumps received from the phone, local diagnostics only
 tools/dumps/
+
+# Python bytecode from the local tools
+__pycache__/
+*.pyc
