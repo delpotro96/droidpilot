@@ -22,8 +22,11 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import dev.droidpilot.R
 import dev.droidpilot.agent.AgentRunner
+import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.data.AgentSettings
+import dev.droidpilot.diag.DumpUploader
 import dev.droidpilot.observer.AgentAccessibilityService
+import dev.droidpilot.observer.ScreenshotProbe
 import dev.droidpilot.serializer.ScreenSerializer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -240,8 +243,48 @@ class MainActivity : AppCompatActivity() {
             )
             logView.text = getString(
                 R.string.dump_header, state.elements.size, mode, state.screenHash
-            ) + "\n\n" + ScreenSerializer.toPrompt(state)
+            ) + describeCapture(state) + "\n\n" + ScreenSerializer.toPrompt(state)
             logScroll.post { logScroll.fullScroll(View.FOCUS_UP) }
+
+            // The listing above drops bounds, resource ids and the screenshot,
+            // which are the fields every policy decision is actually made on.
+            // Reading a screen by copying that listing out by hand meant
+            // guessing at the rest
+            sendDump(state)
+        }
+    }
+
+    private suspend fun sendDump(state: ScreenState) {
+        val endpoint = AgentSettings(this).dumpUrl
+        if (endpoint.isBlank()) return
+
+        when (val result = DumpUploader(endpoint).send(state)) {
+            is DumpUploader.Result.Sent ->
+                append(getString(R.string.dump_sent, result.bytes / 1024))
+            is DumpUploader.Result.Failed ->
+                append(getString(R.string.dump_not_sent, result.reason))
+        }
+    }
+
+    // The one thing a view tree dump can never answer: whether this screen can
+    // be photographed at all. A game behind a security solution returns a
+    // capture that succeeded and shows one flat colour, and without this line
+    // the dump looks identical either way
+    private fun describeCapture(state: ScreenState): String {
+        if (state.isTextUsable) return ""
+
+        val bitmap = ScreenshotProbe.decode(state.screenshot)
+            ?: return "\n" + getString(R.string.dump_shot_none)
+
+        return try {
+            val size = state.screenshot?.size ?: 0
+            "\n" + if (ScreenshotProbe.isBlank(bitmap)) {
+                getString(R.string.dump_shot_blank, bitmap.width, bitmap.height)
+            } else {
+                getString(R.string.dump_shot_ok, bitmap.width, bitmap.height, size / 1024)
+            }
+        } finally {
+            bitmap.recycle()
         }
     }
 

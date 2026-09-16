@@ -11,6 +11,7 @@ import androidx.annotation.RequiresApi
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.serializer.ScreenSerializer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -50,10 +51,14 @@ class AgentAccessibilityService : AccessibilityService() {
     // whatever thread the caller happens to be on
     suspend fun observe(): ScreenState = withContext(Dispatchers.Default) {
         val root = rootInActiveWindow
+        val metrics = resources.displayMetrics
         val state = ScreenSerializer.serialize(
             root = root,
             packageName = root?.packageName?.toString() ?: "unknown",
             activity = lastActivity
+        ).copy(
+            displayWidth = metrics.widthPixels,
+            displayHeight = metrics.heightPixels
         )
 
         // The listing cannot describe this screen, which is what a game looks
@@ -61,8 +66,27 @@ class AgentAccessibilityService : AccessibilityService() {
         if (state.isTextUsable || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             state
         } else {
-            state.copy(screenshot = captureScreenshot())
+            // A secured capture comes back successful and flat. Keeping it
+            // would put a black rectangle in front of the planner, which
+            // answers with invented coordinates rather than admitting it
+            // cannot see. Discarding it leaves the screen undescribed, and
+            // the loop refuses to act on a screen it cannot describe
+            val shot = captureUsable()
+            if (shot == null) Log.w(TAG, "no usable capture of " + state.packageName)
+            state.copy(screenshot = shot)
         }
+    }
+
+    // The platform allows one capture a second and rejects anything sooner,
+    // and the loop observes twice per step. Without the second attempt an
+    // ordinary rate limit would read exactly like a secured screen, and the
+    // run would stop on a game it could perfectly well see
+    @RequiresApi(Build.VERSION_CODES.R)
+    private suspend fun captureUsable(): ByteArray? {
+        captureScreenshot()?.takeUnless { ScreenshotProbe.isBlank(it) }?.let { return it }
+
+        delay(RATE_LIMIT_MILLIS)
+        return captureScreenshot()?.takeUnless { ScreenshotProbe.isBlank(it) }
     }
 
     // Only called when the text listing cannot describe the screen, such as in games
@@ -116,6 +140,9 @@ class AgentAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "DroidPilot"
         private const val MAX_EDGE = 1568
+
+        // The platform's own limit on how often a capture may be requested
+        private const val RATE_LIMIT_MILLIS = 1100L
 
         @Volatile
         var instance: AgentAccessibilityService? = null

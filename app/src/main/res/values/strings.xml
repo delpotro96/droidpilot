@@ -35,4 +35,9 @@
     <string name="dump_header">%1$d elements · %2$s · hash %3$s</string>
     <string name="dump_text_usable">text mode</string>
     <string name="dump_needs_vision">needs vision</string>
+    <string name="dump_shot_ok">capture ok: %1$d x %2$d, %3$d KB</string>
+    <string name="dump_shot_blank">capture came back blank (%1$d x %2$d) - this app blocks screenshots, so nothing can drive it</string>
+    <string name="dump_shot_none">no capture - this app blocks screenshots, so nothing can drive it</string>
+    <string name="dump_sent">full dump sent to the listener (%1$d KB)</string>
+    <string name="dump_not_sent">could not reach the listener: %1$s</string>
 </resources>
