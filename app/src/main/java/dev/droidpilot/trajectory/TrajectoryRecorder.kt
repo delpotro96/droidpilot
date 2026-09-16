@@ -56,7 +56,6 @@ class TrajectoryRecorder(private val goal: String) {
             is AgentAction.Launch -> RecordedAction.Launch(action.packageName)
             AgentAction.Back -> RecordedAction.Back
             AgentAction.Home -> RecordedAction.Home
-            is AgentAction.Wait -> RecordedAction.Wait(action.millis)
 
             // A screen with nothing to address gives the signature no anchors,
             // and the fallback then matches on the activity name alone - which

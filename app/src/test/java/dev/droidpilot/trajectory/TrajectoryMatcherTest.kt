@@ -115,11 +115,4 @@ class TrajectoryMatcherTest {
         assertNull(TrajectoryMatcher.toAction(recorded, live))
     }
 
-    @Test
-    fun `back and wait replay without touching the screen`() {
-        val live = screen()
-
-        assertEquals(AgentAction.Back, TrajectoryMatcher.toAction(RecordedAction.Back, live))
-        assertEquals(AgentAction.Wait(500), TrajectoryMatcher.toAction(RecordedAction.Wait(500), live))
-    }
 }

@@ -69,8 +69,6 @@ sealed interface RecordedAction {
     @Serializable
     data object Home : RecordedAction
 
-    @Serializable
-    data class Wait(val millis: Long) : RecordedAction
 }
 
 // How an element was identified when the path was recorded

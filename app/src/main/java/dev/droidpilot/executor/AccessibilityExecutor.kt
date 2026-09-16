@@ -47,7 +47,6 @@ class AccessibilityExecutor(
             is AgentAction.Launch -> launch(action.packageName)
             AgentAction.Back -> global(AccessibilityService.GLOBAL_ACTION_BACK)
             AgentAction.Home -> global(AccessibilityService.GLOBAL_ACTION_HOME)
-            is AgentAction.Wait -> delay(action.millis)
 
             // Terminal actions handled by the loop, nothing to apply here
             is AgentAction.AskUser,

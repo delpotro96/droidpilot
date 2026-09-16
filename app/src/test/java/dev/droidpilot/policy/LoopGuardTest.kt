@@ -52,15 +52,6 @@ class LoopGuardTest {
         assertTrue(reason!!.contains("changed nothing"))
     }
 
-    @Test
-    fun `waiting repeatedly is not being stuck`() {
-        val guard = guard()
-
-        guard.record(screen(hash = "loading"))
-        repeat(5) { guard.record(screen(hash = "loading"), AgentAction.Wait(500)) }
-
-        assertNull(guard.abortReason())
-    }
 
     @Test
     fun `body text changing does not hide a stuck screen`() {

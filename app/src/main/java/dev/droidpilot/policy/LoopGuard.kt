@@ -13,12 +13,13 @@ class LoopGuard(
     private val recent = ArrayDeque<String>()
     private var steps = 0
 
-    // Waiting is deliberate non-progress, so it must not count towards being
-    // stuck. Two consecutive waits used to kill the run outright, even though
-    // the prompt tells the planner to wait for a screen to settle
+    // There used to be an exemption here for waiting, on the grounds that
+    // waiting is deliberate non-progress. That made this guard - the only rule
+    // that bounded a stall - look away from the one action a small model
+    // reached for whenever it could not decide. Waiting is gone; nothing is
+    // exempt from having to move the screen
     fun record(state: ScreenState, previousAction: AgentAction? = null) {
         steps++
-        if (previousAction is AgentAction.Wait) return
 
         recent.addLast(state.structureHash)
         if (recent.size > REPEAT_LIMIT) recent.removeFirst()

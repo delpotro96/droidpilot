@@ -41,11 +41,10 @@ class SafetyPolicy(
 ) : Policy {
 
     override fun check(action: AgentAction, state: ScreenState): Verdict {
-        // Nothing here presses anything. Wait does reach the executor, but it
-        // only sleeps
+        // Nothing here presses anything
         when (action) {
             is AgentAction.AskUser, is AgentAction.Done,
-            is AgentAction.Fail, is AgentAction.Wait -> return Verdict.Allow
+            is AgentAction.Fail -> return Verdict.Allow
             else -> Unit
         }
 

@@ -31,7 +31,6 @@ sealed interface AgentAction {
 
     data object Back : AgentAction
     data object Home : AgentAction
-    data class Wait(val millis: Long) : AgentAction
 
     // A first-class action so an unsure planner asks instead of tapping at random
     data class AskUser(val question: String) : AgentAction

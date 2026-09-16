@@ -155,6 +155,10 @@ and forwards `/v1/*` to the model server so only one port has to be reachable.
 python tools/dump_listener.py
 ```
 
+On the machine this was built on, `D:\llm\droidpilot-up.bat` starts the model
+and then the listener in one window, and the phone is pointed at port 8099
+alone.
+
 The on-screen listing drops bounds and resource ids, which are the fields
 every policy decision is actually made on, so reading a screen by copying
 that listing out by hand meant guessing at the rest. A run log matters most

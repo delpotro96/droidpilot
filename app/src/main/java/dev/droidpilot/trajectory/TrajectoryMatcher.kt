@@ -74,7 +74,6 @@ object TrajectoryMatcher {
         is RecordedAction.Launch -> AgentAction.Launch(recorded.packageName)
         RecordedAction.Back -> AgentAction.Back
         RecordedAction.Home -> AgentAction.Home
-        is RecordedAction.Wait -> AgentAction.Wait(recorded.millis)
     }
 
     private fun drift(ref: ElementRef, element: UiElement): Int =

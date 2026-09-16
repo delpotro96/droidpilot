@@ -129,7 +129,6 @@ object PlannerPrompt {
         is AgentAction.Launch -> "opened " + action.packageName
         AgentAction.Back -> "pressed back"
         AgentAction.Home -> "pressed home"
-        is AgentAction.Wait -> "waited " + action.millis + "ms"
         is AgentAction.AskUser -> "asked: " + action.question
         is AgentAction.Done -> "finished: " + action.summary
         is AgentAction.Fail -> "gave up: " + action.reason
