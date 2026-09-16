@@ -1,6 +1,7 @@
 package dev.droidpilot.agent
 
 import dev.droidpilot.core.model.AgentAction
+import dev.droidpilot.core.model.ConfirmQuestion
 import dev.droidpilot.core.model.Executor
 import dev.droidpilot.core.model.Goal
 import dev.droidpilot.core.model.Planner
@@ -154,7 +155,9 @@ class AgentLoop(
                     continue
                 }
 
-                if (verdict is Verdict.RequireConfirm && !confirm(verdict.reason)) {
+                if (verdict is Verdict.RequireConfirm &&
+                    !confirm(ConfirmQuestion.of(verdict.reason, state))
+                ) {
                     return Result.Blocked("declined: " + verdict.reason)
                 }
                 break

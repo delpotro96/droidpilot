@@ -1,5 +1,6 @@
 package dev.droidpilot.trajectory
 
+import dev.droidpilot.core.model.ConfirmQuestion
 import dev.droidpilot.core.model.Executor
 import dev.droidpilot.core.model.Policy
 import dev.droidpilot.core.model.ScreenState
@@ -48,7 +49,7 @@ class ReplayRunner(
                 // made any path containing a send or delete button permanently
                 // unrunnable, which is most of what this agent is for
                 is Verdict.RequireConfirm -> {
-                    if (!confirm(verdict.reason)) {
+                    if (!confirm(ConfirmQuestion.of(verdict.reason, state))) {
                         return Outcome.Blocked(index, "declined: " + verdict.reason)
                     }
                     // Answering can take minutes, and the user has to leave this
