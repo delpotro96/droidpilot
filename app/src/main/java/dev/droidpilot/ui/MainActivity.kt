@@ -133,10 +133,13 @@ class MainActivity : AppCompatActivity() {
         AgentRunner.start(this, goal)
     }
 
-    // Enough to catch a typo before a request hangs, not a validator
+    // Enough to catch a typo before a request hangs, not a validator.
+    //
+    // https is rejected outright rather than warned about: a llama.cpp server
+    // speaks plain http, and asked for https it never answers at all. One
+    // letter in this field cost an afternoon of looking at firewalls
     private fun isPlausibleUrl(url: String): Boolean =
-        (url.startsWith("http://") || url.startsWith("https://")) &&
-                url.substringAfter("://").isNotBlank()
+        url.startsWith("http://") && url.substringAfter("://").isNotBlank()
 
     private fun observeRunner() {
         lifecycleScope.launch {

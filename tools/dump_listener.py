@@ -18,9 +18,19 @@ import os
 import re
 import subprocess
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import time
+import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = 8099
+
+# Planner traffic is handed on to the model server on the loopback, so the only
+# port the phone has to reach is this one
+UPSTREAM_PORT = 18080
+
+# A vision model on a small card runs to the better part of a minute
+PROXY_TIMEOUT = 300
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dumps")
 
 # A phone display png runs to a few hundred kilobytes. Anything far past that is
@@ -85,6 +95,15 @@ def summarise(dump):
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = self.path.rstrip("/")
+
+        # The phone could post a megabyte here and could not get a request into
+        # llama.cpp on its own port at all, so planner traffic is forwarded
+        # through the one path that is known to work. It also prints what the
+        # phone actually sent, which no amount of guessing had established
+        if path.startswith("/v1/"):
+            self.proxy(path)
+            return
+
         if path not in ("/dump", "/log"):
             self.send_error(404)
             return
@@ -135,6 +154,45 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.end_headers()
 
+    def proxy(self, path):
+        stamp = datetime.datetime.now().strftime("%H%M%S")
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length) if length else b""
+
+        print("%s  -> %s  %d bytes from %s" % (stamp, path, len(raw), self.client_address[0]))
+        sys.stdout.flush()
+
+        request = urllib.request.Request(
+            UPSTREAM + path,
+            data=raw,
+            headers={"Content-Type": "application/json"},
+        )
+        started = time.time()
+        try:
+            with urllib.request.urlopen(request, timeout=PROXY_TIMEOUT) as answer:
+                body = answer.read()
+                status = answer.status
+        except urllib.error.HTTPError as failure:
+            body = failure.read()
+            status = failure.code
+        except Exception as failure:
+            # send_error puts the reason on the status line, which is latin-1
+            # only, and an OS error here arrives translated into the system
+            # language. The reason goes in the body instead
+            print("          upstream failed: %s" % failure)
+            sys.stdout.flush()
+            body = json.dumps({"error": str(failure)}).encode("utf-8")
+            status = 502
+
+        print("          <- %d in %.1fs, %d bytes" % (status, time.time() - started, len(body)))
+        sys.stdout.flush()
+
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def log_message(self, *_):
         """The summary above is the log. The default one repeats it as noise."""
 
@@ -143,9 +201,15 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     host = tailnet_address()
 
-    server = HTTPServer((host, PORT), Handler)
-    print("listening on http://%s:%d/dump" % (host, PORT))
-    print("set that as the dump url in the app, then press Dump screen")
+    # Threaded, because a planner call holds a connection for as long as the
+    # model thinks and a dump arriving meanwhile must not wait behind it
+    global UPSTREAM
+    UPSTREAM = "http://%s:%d" % (host, UPSTREAM_PORT)
+
+    server = ThreadingHTTPServer((host, PORT), Handler)
+    print("listening on http://%s:%d" % (host, PORT))
+    print("  /dump and /log   from the app")
+    print("  /v1/...          forwarded to %s" % UPSTREAM)
     sys.stdout.flush()
 
     try:

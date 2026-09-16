@@ -29,7 +29,7 @@
     <string name="warn_no_notifications">Notifications are off, so the agent cannot ask for approval while you are in another app. It will stop instead of guessing.</string>
     <string name="error_service_off">Accessibility service is not running.</string>
     <string name="error_no_goal">Enter a goal first.</string>
-    <string name="error_bad_url">That does not look like a URL. Expected something like http://192.168.0.10:8080</string>
+    <string name="error_bad_url">Must start with http:// — the model server does not speak https. Example: http://100.64.0.1:18080</string>
 
     <string name="dump_countdown">Dumping in %1$ds — switch to the target app now</string>
     <string name="dump_header">%1$d elements · %2$s · hash %3$s</string>

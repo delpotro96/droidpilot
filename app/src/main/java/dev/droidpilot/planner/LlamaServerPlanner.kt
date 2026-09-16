@@ -48,7 +48,7 @@ class LlamaServerPlanner(
     // question about a screen it was never shown. It read as a bad model
     // rather than as a blind one. This path was checked against a real
     // screenshot and the model read the stage number off it
-    private val endpoint = baseUrl.trim().trimEnd('/') + "/v1/chat/completions"
+    private val endpoint = baseUrl.trim().trimEnd('/') + CHAT_PATH
 
     override suspend fun next(goal: Goal, state: ScreenState, history: List<Step>): AgentAction {
         val prompt = PlannerPrompt.build(goal, state, history, apps())
@@ -56,7 +56,7 @@ class LlamaServerPlanner(
         val response = runCatching { complete(prompt, state.screenshot) }.getOrElse {
             // Let cancellation unwind instead of turning it into a decision
             if (it is kotlinx.coroutines.CancellationException) throw it
-            return AgentAction.Fail("planner unreachable: " + (it.message ?: it.javaClass.simpleName))
+            return AgentAction.Fail(unreachable(it))
         }
 
         return ActionParser.parse(response).getOrElse {
@@ -70,6 +70,23 @@ class LlamaServerPlanner(
                     " | " + response.take(160)
             )
         }
+    }
+
+    // A llama.cpp server speaks plain http. Asked for https it never answers,
+    // because the handshake it is being offered is not one it can read, and
+    // the run then sits on a TLS negotiation until the timeout. That cost
+    // hours, and the message it produced named a packet header
+    private fun unreachable(failure: Throwable): String {
+        val detail = failure.message ?: failure.javaClass.simpleName
+        val looksLikeTls = endpoint.startsWith("https://") ||
+            detail.contains("TLS", ignoreCase = true) ||
+            detail.contains("SSL", ignoreCase = true)
+
+        if (looksLikeTls) {
+            return "this server speaks plain http, not https - try " +
+                endpoint.removeSuffix(CHAT_PATH).replaceFirst("https://", "http://")
+        }
+        return "planner unreachable: " + detail
     }
 
     // Enqueued rather than executed so cancelling the run actually aborts the
@@ -176,6 +193,7 @@ class LlamaServerPlanner(
     }
 
     companion object {
+        private const val CHAT_PATH = "/v1/chat/completions"
         private const val MAX_TOKENS = 128
         private const val DATA_URL_PREFIX = "data:image/png;base64,"
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
