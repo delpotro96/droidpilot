@@ -3,6 +3,7 @@ package dev.droidpilot.agent
 import android.content.Context
 import dev.droidpilot.core.model.Goal
 import dev.droidpilot.data.AgentSettings
+import dev.droidpilot.diag.DumpUploader
 import dev.droidpilot.executor.AccessibilityExecutor
 import dev.droidpilot.observer.AgentAccessibilityService
 import dev.droidpilot.observer.AppDirectory
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -70,6 +72,8 @@ object AgentRunner {
     fun start(context: Context, goalText: String) {
         val app = context.applicationContext
         val settings = AgentSettings(app)
+
+        logSink = { lines -> DumpUploader(settings.dumpUrl).sendLog(goalText, lines) }
 
         val started = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             val service = AgentAccessibilityService.instance
@@ -189,14 +193,28 @@ object AgentRunner {
             val log = current.log + stamp(line)
             when (current) {
                 is State.AwaitingConfirm -> current.copy(log = log)
+
+                // A line arriving after the run ended used to turn Finished
+                // back into Running, and the screen then showed a spinner over
+                // a run that was already over with no way to tell
+                is State.Finished -> current.copy(log = log)
+
                 else -> State.Running(goal, log)
             }
         }
     }
 
     private fun finish(message: String) {
-        _state.update { State.Finished(message, it.log + stamp(message)) }
+        val ended = _state.updateAndGet { State.Finished(message, it.log + stamp(message)) }
+
+        // The log only ever existed on the phone, which is the worst place for
+        // it: a run that stalls is exactly the run nobody can read
+        scope.launch { logSink?.invoke(ended.log) }
     }
+
+    // Set once by start(), so the log can be posted wherever the dump goes
+    @Volatile
+    private var logSink: (suspend (List<String>) -> Unit)? = null
 
     private fun stamp(line: String): String = clock.format(Date()) + "  " + line
 

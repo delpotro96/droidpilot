@@ -27,12 +27,21 @@ class DumpUploader(
         data class Failed(val reason: String) : Result
     }
 
+    // A run that stalls is the one whose log matters most, and it is also the
+    // one nobody can read: the log lives on the phone, and the phone is in
+    // another app by design
+    suspend fun sendLog(goal: String, lines: List<String>): Result =
+        post(PATH_LOG, json.encodeToString(RunLog(goal, lines, System.currentTimeMillis())))
+
     suspend fun send(state: ScreenState): Result = withContext(Dispatchers.IO) {
         val body = runCatching { json.encodeToString(ScreenDump.of(state)) }
             .getOrElse { return@withContext Result.Failed("could not encode: " + describe(it)) }
+        post(PATH, body)
+    }
 
+    private suspend fun post(path: String, body: String): Result = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url(endpoint.trimEnd('/') + PATH)
+            .url(endpoint.trimEnd('/') + path)
             .post(body.toRequestBody(JSON_MEDIA))
             .build()
 
@@ -52,6 +61,7 @@ class DumpUploader(
 
     private companion object {
         const val PATH = "/dump"
+        const val PATH_LOG = "/log"
         val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
 
         // A screenshot of a phone display runs to a few hundred kilobytes, and

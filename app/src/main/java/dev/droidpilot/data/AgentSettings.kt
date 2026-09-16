@@ -29,8 +29,10 @@ class AgentSettings(context: Context) {
         private const val KEY_STEP_BUDGET = "step_budget"
         private const val KEY_DUMP_URL = "dump_url"
 
-        // A llama.cpp server started with --host 0.0.0.0 on the default port
-        const val DEFAULT_PLANNER_URL = "http://192.168.0.10:8080"
+        // A llama.cpp server on the development machine, reached over the
+        // tailnet so mobile data works. Not llama.cpp's own default port:
+        // 8080 is a gateway on this machine and taking it broke other work
+        const val DEFAULT_PLANNER_URL = "http://100.123.217.82:18080"
         const val DEFAULT_STEP_BUDGET = 40
 
         // The tailnet address of the development machine. A tailnet address

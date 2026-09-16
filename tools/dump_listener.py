@@ -84,7 +84,8 @@ def summarise(dump):
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path.rstrip("/") != "/dump":
+        path = self.path.rstrip("/")
+        if path not in ("/dump", "/log"):
             self.send_error(404)
             return
 
@@ -101,6 +102,19 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         stamp = datetime.datetime.now().strftime("%H%M%S")
+
+        # A run log is what the phone wrote down while it worked, and it is
+        # the only account of a run that stalled. Printed in full rather than
+        # summarised: there is never much of it and every line matters
+        if path == "/log":
+            print("%s  RUN LOG  goal: %s" % (stamp, dump.get("goal", "?")))
+            for line in dump.get("lines", []):
+                print("          " + line)
+            sys.stdout.flush()
+            self.send_response(204)
+            self.end_headers()
+            return
+
         stem = os.path.join(OUT_DIR, "%s-%s" % (stamp, safe(dump.get("packageName"))))
 
         # The screenshot is stripped from the json and written beside it, or

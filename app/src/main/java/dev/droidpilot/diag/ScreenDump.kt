@@ -68,6 +68,11 @@ data class ScreenDump(
     }
 }
 
+// Everything the run wrote down, sent when it ends so a stall can be read
+// from somewhere other than the phone it happened on
+@Serializable
+data class RunLog(val goal: String, val lines: List<String>, val endedAt: Long)
+
 @Serializable
 data class DumpElement(
     val id: Int,

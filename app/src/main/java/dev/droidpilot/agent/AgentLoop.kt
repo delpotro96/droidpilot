@@ -14,6 +14,7 @@ import dev.droidpilot.trajectory.RunOutcome
 import dev.droidpilot.trajectory.TrajectoryRecorder
 import dev.droidpilot.trajectory.TrajectoryStore
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 // Ties observation, planning, policy and replay into one run.
 //
@@ -99,13 +100,25 @@ class AgentLoop(
         var restarts = 0
 
         while (true) {
-            val state = observe()
+            // Reading the tree is a series of binder calls and taking a
+            // screenshot is a callback that is not promised to arrive. Neither
+            // had a deadline, so a run could sit here with the button still
+            // saying Cancel and nothing at all in the log to say why
+            val state = withTimeoutOrNull(OBSERVE_TIMEOUT_MILLIS) { observe() }
+                ?: return Result.Failed("the screen could not be read in time")
+
             guard.record(state, previousAction)
             guard.abortReason()?.let { return Result.Failed(it) }
             undescribed(state)?.let { return it }
 
             onProgress("thinking on " + state.packageName + " (" + state.elements.size + " elements)")
-            val action = planner.next(goal, state, history)
+
+            // The planner talks over the network to a machine that may not be
+            // there. Its own client has timeouts, but a stall anywhere in that
+            // stack used to hold the whole run with no upper bound
+            val action = withTimeoutOrNull(PLANNER_TIMEOUT_MILLIS) {
+                planner.next(goal, state, history)
+            } ?: return Result.Failed("the planner did not answer in time")
             onProgress("-> " + action)
 
             when (action) {
@@ -231,5 +244,13 @@ class AgentLoop(
         // A screen that will not hold still for one round trip is not one the
         // agent can operate, and spinning on it burns the whole budget silently
         const val MAX_RESTARTS = 3
+
+        // Reading a tree is milliseconds when it works at all
+        const val OBSERVE_TIMEOUT_MILLIS = 20_000L
+
+        // A vision model on a small card runs to the better part of a minute
+        // for one screen, so this is generous rather than tight. It exists to
+        // put a ceiling on a stall, not to pace a slow model
+        const val PLANNER_TIMEOUT_MILLIS = 4 * 60 * 1000L
     }
 }
