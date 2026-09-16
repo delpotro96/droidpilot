@@ -58,8 +58,12 @@ class ActionParserTest {
     }
 
     @Test
-    fun `wait falls back to a default when the server omits the duration`() {
-        assertEquals(AgentAction.Wait(1000), ActionParser.parse("""{"action":"wait"}""").getOrThrow())
+    fun `wait is refused, because the one rule that bounded it was switched off`() {
+        // The grammar stopped offering it, but a server that ignores the
+        // grammar could still answer with it, and the loop guard exempts
+        // waiting from counting as a step that changed nothing - so it was an
+        // unbounded stall behind a guard that had been told to look away
+        assertTrue(ActionParser.parse("""{"action":"wait"}""").isFailure)
     }
 
     @Test

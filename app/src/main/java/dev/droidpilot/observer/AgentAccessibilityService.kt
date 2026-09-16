@@ -55,7 +55,8 @@ class AgentAccessibilityService : AccessibilityService() {
         val state = ScreenSerializer.serialize(
             root = root,
             packageName = root?.packageName?.toString() ?: "unknown",
-            activity = lastActivity
+            activity = lastActivity,
+            displayHeight = metrics.heightPixels
         ).copy(
             displayWidth = metrics.widthPixels,
             displayHeight = metrics.heightPixels

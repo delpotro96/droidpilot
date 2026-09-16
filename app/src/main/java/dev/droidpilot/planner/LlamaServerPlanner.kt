@@ -65,7 +65,7 @@ class LlamaServerPlanner(
             return AgentAction.Fail(unreachable(it))
         }
 
-        return ActionParser.parse(response).getOrElse {
+        return ActionParser.parse(response).map(::resolveLaunch).getOrElse {
             // A planner that cannot be understood must not be allowed to act.
             // The reply is quoted because the two failures that cost the most
             // here both looked identical from the outside: an empty string
@@ -76,6 +76,21 @@ class LlamaServerPlanner(
                     " | " + response.take(160)
             )
         }
+    }
+
+    // A small model copying a long package name out of a list drops the tail:
+    // com.sec.android.app.clock for com.sec.android.app.clockpackage. Resolved
+    // here rather than in the executor, because the policy reads the package
+    // to decide whether it may be opened at all, and an executor that expanded
+    // it afterwards turned viva.republica into a bank the policy had cleared
+    private fun resolveLaunch(action: AgentAction): AgentAction {
+        if (action !is AgentAction.Launch) return action
+
+        val installed = apps()
+        if (installed.any { it.packageName == action.packageName }) return action
+
+        val candidates = installed.filter { it.packageName.startsWith(action.packageName) }
+        return if (candidates.size == 1) AgentAction.Launch(candidates.first().packageName) else action
     }
 
     // A llama.cpp server speaks plain http. Asked for https it never answers,

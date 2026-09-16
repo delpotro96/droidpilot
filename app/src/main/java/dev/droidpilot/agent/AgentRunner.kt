@@ -73,8 +73,6 @@ object AgentRunner {
         val app = context.applicationContext
         val settings = AgentSettings(app)
 
-        logSink = { lines -> DumpUploader(settings.dumpUrl).sendLog(goalText, lines) }
-
         val started = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             val service = AgentAccessibilityService.instance
             if (service == null) {
@@ -89,7 +87,7 @@ object AgentRunner {
                     apps = directory::all,
                     ownPackage = app.packageName
                 ),
-                executor = AccessibilityExecutor(service, directory::all),
+                executor = AccessibilityExecutor(service),
                 policy = SafetyPolicy(ownPackage = app.packageName),
                 store = FileTrajectoryStore(File(app.filesDir, TRAJECTORY_FILE)),
                 guardFactory = { budget -> LoopGuard(app, budget) },
@@ -121,6 +119,12 @@ object AgentRunner {
             }
             return
         }
+        // Set only once this run owns the slot. Assigned before the race was
+        // decided, a start that lost it still replaced the sink, and the log
+        // of the run that was finishing went out labelled with the goal of the
+        // run that never began
+        logSink = { lines -> DumpUploader(settings.dumpUrl).sendLog(goalText, lines) }
+
         cancelling = false
         // The address is saved, so installing a new build does not change it.
         // Hours went into a run that was quietly posting to a gateway on

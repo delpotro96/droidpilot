@@ -28,11 +28,16 @@ object ScreenSerializer {
     private const val MAX_SCAN = 400
     private const val MAX_DEPTH = 40
 
-    fun serialize(root: AccessibilityNodeInfo?, packageName: String, activity: String?): ScreenState {
+    fun serialize(
+        root: AccessibilityNodeInfo?,
+        packageName: String,
+        activity: String?,
+        displayHeight: Int = 0
+    ): ScreenState {
         val collected = mutableListOf<UiElement>()
         if (root != null) walk(root, 0, collected)
 
-        val elements = choose(collected)
+        val elements = choose(collected, displayHeight)
         return ScreenState(
             packageName = packageName,
             activity = activity,
@@ -60,7 +65,7 @@ object ScreenSerializer {
     //
     // Internal rather than private because it is the only part of this file a
     // test can reach without a live view tree
-    internal fun choose(collected: List<UiElement>): List<UiElement> {
+    internal fun choose(collected: List<UiElement>, displayHeight: Int = 0): List<UiElement> {
         if (collected.size <= MAX_ELEMENTS) return collected
 
         // Chosen by where they sit on screen, not by where they sit in the
@@ -68,7 +73,11 @@ object ScreenSerializer {
         // every tail id by one, the structure hash moved with it, and an active
         // conversation burned the restart budget without ever acting. The
         // compose bar does not move down the screen when a message arrives
-        val floor = collected.maxOf { it.bounds.bottom }
+        // Bounds are not clipped to the display: a wrap_content WebView inside
+        // a scroll view reports its whole content height. One of those put the
+        // band at 17000 on a 2400px screen, emptied the tail, and dropped the
+        // compose bar this function exists to keep
+        val floor = displayHeight.takeIf { it > 0 } ?: collected.maxOf { it.bounds.bottom }
         val band = (floor * BOTTOM_BAND).toInt()
         val tail = collected.filter { it.bounds.top >= band }.takeLast(TAIL_ELEMENTS)
 

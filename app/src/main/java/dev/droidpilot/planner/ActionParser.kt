@@ -37,12 +37,13 @@ object ActionParser {
             "launch" -> AgentAction.Launch(obj.requireString("package").trim())
             "back" -> AgentAction.Back
             "home" -> AgentAction.Home
-            "wait" -> AgentAction.Wait(
-                (obj.long("millis") ?: DEFAULT_WAIT_MILLIS).coerceIn(0L, MAX_WAIT_MILLIS)
-            )
             "ask" -> AgentAction.AskUser(obj.requireString("question"))
             "done" -> AgentAction.Done(obj.requireString("summary"))
             "fail" -> AgentAction.Fail(obj.requireString("reason"))
+            // wait is not in the grammar. A server that ignores the grammar
+            // could still answer with it, and the only rule that bounded it -
+            // the loop guard - exempts waiting from counting as no progress,
+            // so it was an unbounded stall behind a switched-off guard
             else -> error("unknown action: " + name)
         }
     }
@@ -107,9 +108,4 @@ object ActionParser {
     private fun JsonObject.requireString(key: String): String =
         string(key) ?: error("missing field: " + key)
 
-    private const val DEFAULT_WAIT_MILLIS = 1000L
-
-    // Waiting is for a screen to settle. Anything longer is the planner
-    // stalling, and the step budget counts steps rather than time
-    private const val MAX_WAIT_MILLIS = 15_000L
 }

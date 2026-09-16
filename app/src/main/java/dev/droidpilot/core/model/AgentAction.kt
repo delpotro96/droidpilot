@@ -104,5 +104,11 @@ data class Step(
     val action: AgentAction,
     val beforeHash: String,
     val succeeded: Boolean,
+    // A choice the policy would not allow. Nothing reached the screen, so it
+    // is not a step that was taken and failed: reported as one, the planner
+    // read "tapped 500,500 (failed)" and concluded the press had done nothing,
+    // which is the opposite of what happened. It also does not spend the
+    // budget, which counts what the person asked for
+    val refused: Boolean = false,
     val at: Long = System.currentTimeMillis()
 )

@@ -26,6 +26,17 @@ data class ScreenState(
     val displayHeight: Int = 0,
     val capturedAt: Long = System.currentTimeMillis()
 ) {
+    // Something the planner can name and press. A surface is not one: pressing
+    // it means pressing the middle of the screen.
+    //
+    // The prompt and the policy used to answer this question differently. A
+    // video with a buy button beside it is not text usable, so the prompt told
+    // the planner to aim at the screenshot, and the policy then refused every
+    // point on it because the button was listed. The two Deny messages pointed
+    // at each other and the run burned its refusals going round
+    val hasNameableTarget: Boolean
+        get() = elements.any { it.role != Role.SURFACE && (it.clickable || it.editable) }
+
     // Whether the text listing alone is enough to decide the next action
     val isTextUsable: Boolean
         get() = elements.count { it.clickable } >= MIN_CLICKABLE &&

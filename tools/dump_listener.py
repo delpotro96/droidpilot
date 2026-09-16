@@ -65,7 +65,9 @@ def tailnet_address():
 
 
 def safe(name):
-    return re.sub(r"[^A-Za-z0-9._-]", "_", name or "unknown")
+    # Also the only thing standing between a field the phone controls and a
+    # path, so it takes whatever type arrives rather than only a string
+    return re.sub(r"[^A-Za-z0-9._-]", "_", str(name) if name else "unknown")
 
 
 def summarise(dump):
@@ -108,8 +110,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
 
-        length = int(self.headers.get("Content-Length") or 0)
-        if length <= 0 or length > MAX_BODY:
+        length = self.length()
+        if not length or length > MAX_BODY:
             self.send_error(413)
             return
 
@@ -118,6 +120,13 @@ class Handler(BaseHTTPRequestHandler):
             dump = json.loads(raw)
         except ValueError as failure:
             self.send_error(400, str(failure))
+            return
+
+        # json accepts arrays, strings and numbers too, and every line below
+        # calls a dict method. One of those killed the connection thread and
+        # answered the phone with nothing at all
+        if not isinstance(dump, dict):
+            self.send_error(400, "expected a json object")
             return
 
         stamp = datetime.datetime.now().strftime("%H%M%S")
@@ -156,7 +165,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def proxy(self, path):
         stamp = datetime.datetime.now().strftime("%H%M%S")
-        length = int(self.headers.get("Content-Length") or 0)
+
+        # Checked before the read, as /dump does. A declared length is a
+        # promise from whoever is calling, and reading one of four gigabytes
+        # into memory on their say-so is how this process dies
+        length = self.length()
+        if length is None or length > MAX_BODY:
+            self.send_error(413)
+            return
+
         raw = self.rfile.read(length) if length else b""
 
         print("%s  -> %s  %d bytes from %s" % (stamp, path, len(raw), self.client_address[0]))
@@ -207,6 +224,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def length(self):
+        """The declared body size, or None when it is not a number."""
+        raw = self.headers.get("Content-Length")
+        if raw is None:
+            return 0
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if value >= 0 else None
 
     def log_message(self, *_):
         """The summary above is the log. The default one repeats it as noise."""

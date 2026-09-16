@@ -58,7 +58,11 @@ object PlannerPrompt {
         ownPackage: String? = null
     ): String = buildString {
         append(SYSTEM).append('\n')
-        if (!state.isTextUsable) append('\n').append(VISION).append('\n')
+        // Attached where a point is the only way in, which is the same test
+        // the policy applies. Keyed on isTextUsable it appeared on any screen
+        // merely holding a surface, so a video with a buy button beside it was
+        // told to aim at the screenshot and then refused for doing it
+        if (!state.hasNameableTarget) append('\n').append(VISION).append('\n')
         append('\n')
 
         append("Goal: ").append(goal.raw).append('\n')
@@ -69,7 +73,13 @@ object PlannerPrompt {
             append("Recent actions:\n")
             history.takeLast(HISTORY_LIMIT).forEach { step ->
                 append("- ").append(describe(step.action))
-                if (!step.succeeded) append(" (failed)")
+                when {
+                    // "tapped element 0 (failed)" tells the model the press
+                    // happened and did nothing, which is the opposite of what
+                    // a refusal means: nothing reached the screen at all
+                    step.refused -> append(" (not allowed, choose something else)")
+                    !step.succeeded -> append(" (failed)")
+                }
                 append('\n')
             }
             append('\n')
@@ -99,7 +109,13 @@ object PlannerPrompt {
         }
         append('\n')
 
-        append("Budget: ").append(goal.stepBudget - history.size).append(" actions left\n\n")
+        // Counts what was actually done. Refusals were in here, and a screen
+        // the planner misread four times reported a negative budget; so was
+        // every entry of a history that outlives the budget, which reported
+        // minus a hundred and sixty
+        val spent = history.count { !it.refused }
+        append("Budget: ").append((goal.stepBudget - spent).coerceAtLeast(0))
+        append(" actions left\n\n")
         append("Respond with one JSON action, for example ").append(ActionGrammar.EXAMPLE).append('\n')
     }
 

@@ -71,10 +71,7 @@ class SafetyPolicy(
     private fun blindVerdict(action: AgentAction, state: ScreenState): Verdict? {
         if (!action.isBlind) return null
 
-        val nameable = state.elements.any {
-            it.role != Role.SURFACE && (it.clickable || it.editable)
-        }
-        if (!nameable) return null
+        if (!state.hasNameableTarget) return null
 
         return Verdict.Deny("this screen lists what it can do, press one by number")
     }

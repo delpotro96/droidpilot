@@ -99,6 +99,7 @@ class AgentLoop(
         val recorder = TrajectoryRecorder(goal.raw)
         var previousAction: AgentAction? = null
         var restarts = 0
+        var blind = 0
 
         while (true) {
             // Reading the tree is a series of binder calls and taking a
@@ -110,7 +111,20 @@ class AgentLoop(
 
             guard.record(state, previousAction)
             guard.abortReason()?.let { return Result.Failed(it) }
-            undescribed(state)?.let { return it }
+
+            // rootInActiveWindow returns null while a window is changing, which
+            // reads exactly like a screen that cannot be described. Telling the
+            // two apart takes a second look, not a better test
+            if (undescribed(state)) {
+                blind++
+                if (blind > MAX_BLIND) {
+                    return Result.Failed("this screen cannot be listed or captured, nothing to plan against")
+                }
+                onProgress("nothing to read yet, looking again")
+                delay(settleMillis)
+                continue
+            }
+            blind = 0
 
             // A refused choice is a wrong one, not a dangerous one: nothing
             // reached the screen, so the screen has not moved and there is
@@ -151,7 +165,7 @@ class AgentLoop(
                     if (refused > MAX_REFUSALS) return Result.Blocked(verdict.reason)
 
                     onProgress("refused: " + verdict.reason)
-                    history += Step(action, state.screenHash, succeeded = false)
+                    history += Step(action, state.screenHash, succeeded = false, refused = true)
                     continue
                 }
 
@@ -170,7 +184,9 @@ class AgentLoop(
             // Compared on structure, not on every label: a clock or an unread
             // badge ticking over is not the screen moving, and treating it as
             // such meant the agent never acted at all on a chat list
-            val current = observe()
+            val current = withTimeoutOrNull(OBSERVE_TIMEOUT_MILLIS) { observe() }
+                ?: return Result.Failed("the screen could not be read in time")
+
             if (!stillAddresses(action, state, current)) {
                 restarts++
                 if (restarts > MAX_RESTARTS) {
@@ -203,11 +219,8 @@ class AgentLoop(
     // The usual cause is a game running a security solution: FLAG_SECURE makes
     // every capture come back flat, and the view tree was never going to
     // describe it
-    private fun undescribed(state: ScreenState): Result? {
-        if (state.isTextUsable || state.screenshot != null) return null
-
-        return Result.Failed("this screen cannot be listed or captured, nothing to plan against")
-    }
+    private fun undescribed(state: ScreenState): Boolean =
+        !state.isTextUsable && state.screenshot == null
 
     // An element id means nothing across two observations. A list that gained
     // three rows renumbers everything below them, and the executor would
@@ -215,10 +228,17 @@ class AgentLoop(
     // has to hold is not that the screen is identical, but that the element the
     // policy vetted is still the one at that index
     private fun stillAddresses(action: AgentAction, before: ScreenState, after: ScreenState): Boolean {
-        // Opening an app is about somewhere else entirely, so nothing about
-        // the screen it was decided on has to still hold. Holding it to one
-        // would spend the restart budget on a screen it is about to leave
-        if (action is AgentAction.Launch) return true
+        // Leaving is about somewhere else entirely, so nothing about the
+        // screen it was decided on has to still hold. Holding these to one
+        // spent the restart budget on a screen the agent was trying to get
+        // out of - and getting out is the only move left when it has landed
+        // somewhere it should not be
+        if (action is AgentAction.Launch ||
+            action is AgentAction.Back ||
+            action is AgentAction.Home
+        ) {
+            return true
+        }
 
         // Every verdict was reached about one app. Another one in front of us
         // means the package rules were applied to a screen that has gone, and a
@@ -264,6 +284,10 @@ class AgentLoop(
 
     private companion object {
         const val DEFAULT_SETTLE_MILLIS = 400L
+
+        // A window in the middle of changing exposes no tree at all, and that
+        // is indistinguishable from a screen nothing can read
+        const val MAX_BLIND = 2
 
         // A screen that will not hold still for one round trip is not one the
         // agent can operate, and spinning on it burns the whole budget silently
