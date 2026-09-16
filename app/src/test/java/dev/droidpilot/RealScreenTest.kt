@@ -281,6 +281,35 @@ class RealScreenTest {
     }
 
     @Test
+    fun `an app is opened by package rather than waiting to be opened by hand`() {
+        val action = ActionParser.parse("""{"action":"launch","package":"com.kakao.talk"}""")
+
+        assertEquals(AgentAction.Launch("com.kakao.talk"), action.getOrNull())
+    }
+
+    @Test
+    fun `opening a blocked app is refused wherever it is asked from`() {
+        // The package rules read the screen in front of us, and this action is
+        // about somewhere else. Judged on where it goes
+        val verdict = policy.check(
+            AgentAction.Launch("viva.republica.toss"),
+            screen(elements = chatScreen("hello"))
+        )
+
+        assertTrue(verdict is Verdict.Deny)
+    }
+
+    @Test
+    fun `opening an ordinary app needs no permission`() {
+        val verdict = policy.check(
+            AgentAction.Launch("com.kakao.talk"),
+            screen(elements = chatScreen("hello"))
+        )
+
+        assertEquals(Verdict.Allow, verdict)
+    }
+
+    @Test
     fun `a point survives the grammar round trip`() {
         val action = ActionParser.parse("""{"action":"tapAt","x":250,"y":900,"risk":"none"}""")
 

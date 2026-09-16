@@ -5,6 +5,7 @@ import dev.droidpilot.core.model.Goal
 import dev.droidpilot.data.AgentSettings
 import dev.droidpilot.executor.AccessibilityExecutor
 import dev.droidpilot.observer.AgentAccessibilityService
+import dev.droidpilot.observer.AppDirectory
 import dev.droidpilot.planner.LlamaServerPlanner
 import dev.droidpilot.policy.LoopGuard
 import dev.droidpilot.policy.SafetyPolicy
@@ -78,7 +79,10 @@ object AgentRunner {
             }
 
             val loop = AgentLoop(
-                planner = LlamaServerPlanner(settings.plannerUrl),
+                planner = LlamaServerPlanner(
+                    baseUrl = settings.plannerUrl,
+                    apps = AppDirectory(app)::all
+                ),
                 executor = AccessibilityExecutor(service),
                 policy = SafetyPolicy(),
                 store = FileTrajectoryStore(File(app.filesDir, TRAJECTORY_FILE)),

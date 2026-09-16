@@ -2,6 +2,7 @@ package dev.droidpilot.executor
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Bundle
@@ -43,6 +44,7 @@ class AccessibilityExecutor(
             is AgentAction.LongPressAt -> gesturePoint(action.point, state, DURATION_LONG_PRESS)
             is AgentAction.Input -> input(element(action.elementId, state), action.text)
             is AgentAction.Swipe -> swipe(action.direction, action.elementId?.let { element(it, state) }, state)
+            is AgentAction.Launch -> launch(action.packageName)
             AgentAction.Back -> global(AccessibilityService.GLOBAL_ACTION_BACK)
             AgentAction.Home -> global(AccessibilityService.GLOBAL_ACTION_HOME)
             is AgentAction.Wait -> delay(action.millis)
@@ -150,6 +152,18 @@ class AccessibilityExecutor(
         }
 
         dispatch(Path().apply { moveTo(cx, cy); lineTo(ex, ey) }, DURATION_SWIPE)
+    }
+
+    // A package the phone does not have resolves to no intent at all, and
+    // starting nothing would leave the run staring at the same screen and
+    // calling it a success. The failure has to be loud enough to plan around
+    private fun launch(packageName: String) {
+        val intent = service.packageManager.getLaunchIntentForPackage(packageName)
+            ?: error("no app called " + packageName + " on this phone")
+
+        // Started from a service, so there is no task to join
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        service.startActivity(intent)
     }
 
     private fun global(actionId: Int) {

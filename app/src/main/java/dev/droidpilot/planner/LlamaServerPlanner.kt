@@ -2,6 +2,7 @@ package dev.droidpilot.planner
 
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Goal
+import dev.droidpilot.core.model.InstalledApp
 import dev.droidpilot.core.model.Planner
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.Step
@@ -33,7 +34,10 @@ import kotlin.coroutines.resumeWithException
 class LlamaServerPlanner(
     baseUrl: String,
     private val client: OkHttpClient = defaultClient(),
-    private val temperature: Double = 0.0
+    private val temperature: Double = 0.0,
+    // Read lazily rather than passed in, because walking every installed
+    // package costs more than a run that never needs to open anything
+    private val apps: () -> List<InstalledApp> = ::emptyList
 ) : Planner {
 
     // The chat endpoint rather than /completion.
@@ -47,7 +51,7 @@ class LlamaServerPlanner(
     private val endpoint = baseUrl.trim().trimEnd('/') + "/v1/chat/completions"
 
     override suspend fun next(goal: Goal, state: ScreenState, history: List<Step>): AgentAction {
-        val prompt = PlannerPrompt.build(goal, state, history)
+        val prompt = PlannerPrompt.build(goal, state, history, apps())
 
         val response = runCatching { complete(prompt, state.screenshot) }.getOrElse {
             // Let cancellation unwind instead of turning it into a decision

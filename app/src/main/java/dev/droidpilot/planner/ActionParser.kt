@@ -34,6 +34,7 @@ object ActionParser {
                 obj.int("elementId"),
                 obj.risk()
             )
+            "launch" -> AgentAction.Launch(obj.requireString("package").trim())
             "back" -> AgentAction.Back
             "home" -> AgentAction.Home
             "wait" -> AgentAction.Wait(

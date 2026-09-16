@@ -46,6 +46,7 @@ class SafetyPolicy(
             else -> Unit
         }
 
+        launchVerdict(action)?.let { return it }
         packageVerdict(state)?.let { return it }
         blindVerdict(action, state)?.let { return it }
         surfaceVerdict(action, state)?.let { return it }
@@ -72,6 +73,21 @@ class SafetyPolicy(
         if (!nameable) return null
 
         return Verdict.Deny("this screen lists what it can do, press one by number")
+    }
+
+    // The package rules read the screen in front of us, and opening an app is
+    // the one action whose subject is somewhere else. Judged on where it goes,
+    // or the agent could walk into a banking app simply by asking for it
+    private fun launchVerdict(action: AgentAction): Verdict? {
+        if (action !is AgentAction.Launch) return null
+
+        if (action.packageName in blockedPackages) {
+            return Verdict.Deny("blocked app: " + action.packageName)
+        }
+        if (allowedPackages != null && action.packageName !in allowedPackages) {
+            return Verdict.Deny("app not on the allow list: " + action.packageName)
+        }
+        return null
     }
 
     private fun packageVerdict(state: ScreenState): Verdict? {

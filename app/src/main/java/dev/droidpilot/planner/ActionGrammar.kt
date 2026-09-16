@@ -21,7 +21,8 @@ object ActionGrammar {
 
     val GBNF: String = """
 root       ::= "{" ws "\"action\":" ws body ws "}"
-body       ::= tap | longpress | tapat | longpressat | input | swipe | back | home | wait | ask | done | fail
+body       ::= tap | longpress | tapat | longpressat | input | swipe | launch | back | home | wait | ask | done | fail
+launch     ::= "\"launch\"" sep "\"package\":" ws string
 tap        ::= "\"tap\"" sep "\"elementId\":" ws int sep "\"risk\":" ws risk
 longpress  ::= "\"longPress\"" sep "\"elementId\":" ws int sep "\"risk\":" ws risk
 tapat      ::= "\"tapAt\"" sep "\"x\":" ws int sep "\"y\":" ws int sep "\"risk\":" ws risk

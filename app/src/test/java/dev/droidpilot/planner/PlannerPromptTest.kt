@@ -3,6 +3,7 @@ package dev.droidpilot.planner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Goal
+import dev.droidpilot.core.model.InstalledApp
 import dev.droidpilot.core.model.Step
 import dev.droidpilot.element
 import dev.droidpilot.screen
@@ -65,4 +66,23 @@ class PlannerPromptTest {
 
     private fun step(action: AgentAction, succeeded: Boolean = true) =
         Step(action = action, beforeHash = "h", succeeded = succeeded)
+
+    @Test
+    fun `the prompt lists the apps that can be opened, with their packages`() {
+        val prompt = PlannerPrompt.build(
+            Goal("reply on kakaotalk"),
+            screen(elements = listOf(element(0, "Settings"))),
+            emptyList(),
+            listOf(
+                InstalledApp("KakaoTalk", "com.kakao.talk"),
+                InstalledApp("Clock", "com.sec.android.app.clockpackage")
+            )
+        )
+
+        // A guessed package name opens nothing and reports nothing, so the
+        // names are offered the same way screen elements are
+        assertTrue(prompt.contains("com.kakao.talk"))
+        assertTrue(prompt.contains("KakaoTalk"))
+    }
+
 }

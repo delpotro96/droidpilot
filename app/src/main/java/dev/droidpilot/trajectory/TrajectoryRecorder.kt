@@ -53,6 +53,7 @@ class TrajectoryRecorder(private val goal: String) {
             is AgentAction.Input -> ref(action.elementId)?.let { RecordedAction.Input(it, action.text) }
             is AgentAction.Swipe ->
                 RecordedAction.Swipe(action.direction.name, action.elementId?.let { ref(it) })
+            is AgentAction.Launch -> RecordedAction.Launch(action.packageName)
             AgentAction.Back -> RecordedAction.Back
             AgentAction.Home -> RecordedAction.Home
             is AgentAction.Wait -> RecordedAction.Wait(action.millis)

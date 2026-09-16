@@ -2,6 +2,7 @@ package dev.droidpilot.planner
 
 import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Goal
+import dev.droidpilot.core.model.InstalledApp
 import dev.droidpilot.core.model.GridPoint
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.Step
@@ -39,6 +40,10 @@ object PlannerPrompt {
           that screen can be read as text, which means the risk you declare is
           the only thing standing between the goal and a purchase. Read the
           button before you press it.
+        - The phone may be showing anything at all when you start, including
+          this app. Open what the goal needs with launch, naming a package
+          from the list below. Do not invent one: a name that is not on the
+          list opens nothing and says nothing.
         - If the screen is still loading, emit wait rather than pressing.
         - If the goal is already achieved, emit done.
         - If the screen does not let you make progress, emit back or swipe.
@@ -47,7 +52,16 @@ object PlannerPrompt {
         - If the goal is impossible on this screen, emit fail.
     """.trimIndent()
 
-    fun build(goal: Goal, state: ScreenState, history: List<Step>): String = buildString {
+    // How many apps are offered. A phone holds a few hundred, most of them
+    // system components nobody names in a goal
+    const val APP_LIMIT = 60
+
+    fun build(
+        goal: Goal,
+        state: ScreenState,
+        history: List<Step>,
+        apps: List<InstalledApp> = emptyList()
+    ): String = buildString {
         append(SYSTEM).append("\n\n")
 
         append("Goal: ").append(goal.raw).append('\n')
@@ -60,6 +74,14 @@ object PlannerPrompt {
                 append("- ").append(describe(step.action))
                 if (!step.succeeded) append(" (failed)")
                 append('\n')
+            }
+            append('\n')
+        }
+
+        if (apps.isNotEmpty()) {
+            append("Apps you can open:\n")
+            apps.take(APP_LIMIT).forEach {
+                append("- ").append(it.label).append("  ").append(it.packageName).append('\n')
             }
             append('\n')
         }
@@ -79,6 +101,7 @@ object PlannerPrompt {
         is AgentAction.LongPressAt -> "long pressed " + at(action.point)
         is AgentAction.Input -> "typed into element " + action.elementId
         is AgentAction.Swipe -> "swiped " + action.direction.name.lowercase()
+        is AgentAction.Launch -> "opened " + action.packageName
         AgentAction.Back -> "pressed back"
         AgentAction.Home -> "pressed home"
         is AgentAction.Wait -> "waited " + action.millis + "ms"

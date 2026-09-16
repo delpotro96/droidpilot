@@ -53,6 +53,11 @@ data class ScreenState(
     }
 }
 
+// An app the planner may open by name. Offered as a closed list for the same
+// reason screen elements are: a guessed package name launches nothing, and the
+// failure is silent
+data class InstalledApp(val label: String, val packageName: String)
+
 // A single element the planner can refer to by id
 data class UiElement(
     val id: Int,

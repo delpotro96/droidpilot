@@ -178,6 +178,11 @@ class AgentLoop(
     // has to hold is not that the screen is identical, but that the element the
     // policy vetted is still the one at that index
     private fun stillAddresses(action: AgentAction, before: ScreenState, after: ScreenState): Boolean {
+        // Opening an app is about somewhere else entirely, so nothing about
+        // the screen it was decided on has to still hold. Holding it to one
+        // would spend the restart budget on a screen it is about to leave
+        if (action is AgentAction.Launch) return true
+
         // Every verdict was reached about one app. Another one in front of us
         // means the package rules were applied to a screen that has gone, and a
         // store or a bank opening mid-thought is exactly what that list exists

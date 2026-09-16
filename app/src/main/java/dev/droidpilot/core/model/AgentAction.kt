@@ -23,6 +23,12 @@ sealed interface AgentAction {
     data class TapAt(val point: GridPoint, val risk: Risk = Risk.NONE) : AgentAction
     data class LongPressAt(val point: GridPoint, val risk: Risk = Risk.NONE) : AgentAction
 
+    // Without this the agent could only ever operate whatever app happened to
+    // be in front of it, which means the person has to open the app first -
+    // and if they are already holding the phone with the right screen open,
+    // there was little left worth automating
+    data class Launch(val packageName: String) : AgentAction
+
     data object Back : AgentAction
     data object Home : AgentAction
     data class Wait(val millis: Long) : AgentAction

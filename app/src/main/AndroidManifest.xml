@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Only used to reach the planner. A model running on this phone needs none of this -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The planner is offered a list of apps it may open, and from API 30 a
+         package is invisible unless asked for by name. A goal names an app the
+         way a person does, so which one it will be is not known in advance -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- The guardrail asks its question while the user is in another app -->

@@ -58,6 +58,11 @@ sealed interface RecordedAction {
     @Serializable
     data class Swipe(val direction: String, val target: ElementRef?) : RecordedAction
 
+    // A package name means the same thing on every run, so this is the one
+    // step that never needs resolving against a live screen
+    @Serializable
+    data class Launch(val packageName: String) : RecordedAction
+
     @Serializable
     data object Back : RecordedAction
 
