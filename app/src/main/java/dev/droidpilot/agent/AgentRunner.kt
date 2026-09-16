@@ -121,7 +121,16 @@ object AgentRunner {
             return
         }
         cancelling = false
-        _state.value = State.Running(goalText, listOf(stamp("started: " + goalText)))
+        // The address is saved, so installing a new build does not change it.
+        // Hours went into a run that was quietly posting to a gateway on
+        // another port, and nothing written down said where it was going
+        _state.value = State.Running(
+            goalText,
+            listOf(
+                stamp("started: " + goalText),
+                stamp("planner: " + settings.plannerUrl)
+            )
+        )
         started.invokeOnCompletion { job.compareAndSet(started, null) }
         started.start()
     }

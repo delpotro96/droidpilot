@@ -60,8 +60,15 @@ class LlamaServerPlanner(
         }
 
         return ActionParser.parse(response).getOrElse {
-            // A planner that cannot be understood must not be allowed to act
-            AgentAction.Fail("unreadable planner response: " + (it.message ?: "unknown"))
+            // A planner that cannot be understood must not be allowed to act.
+            // The reply is quoted because the two failures that cost the most
+            // here both looked identical from the outside: an empty string
+            // from a reasoning model, and an error page from a web server that
+            // was never a planner at all
+            AgentAction.Fail(
+                "unreadable planner reply: " + (it.message ?: "unknown") +
+                    " | " + response.take(160)
+            )
         }
     }
 
