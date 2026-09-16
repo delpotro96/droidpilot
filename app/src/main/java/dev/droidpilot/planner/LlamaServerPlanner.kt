@@ -149,12 +149,22 @@ class LlamaServerPlanner(
         val body = response.body?.string().orEmpty()
         check(response.isSuccessful) { "server returned " + response.code }
 
-        return JSON.parseToJsonElement(body)
+        val message = JSON.parseToJsonElement(body)
             .jsonObject["choices"]
             ?.jsonArray?.firstOrNull()
             ?.jsonObject?.get("message")
-            ?.jsonObject?.get("content")
-            ?.jsonPrimitive?.contentOrNull
+            ?.jsonObject
+            ?: error("response had no message")
+
+        // A reasoning model puts its answer in reasoning_content and leaves
+        // content empty, and a grammar does not change that - it only decides
+        // what the thinking is allowed to look like. Reading one field gave a
+        // blank string and an unreadable planner, on a model that had in fact
+        // answered correctly
+        return listOf("content", "reasoning_content")
+            .firstNotNullOfOrNull { field ->
+                message[field]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            }
             ?: error("response had no message content")
     }
 

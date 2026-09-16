@@ -82,12 +82,13 @@ object AgentRunner {
                 return@launch
             }
 
+            val directory = AppDirectory(app)
             val loop = AgentLoop(
                 planner = LlamaServerPlanner(
                     baseUrl = settings.plannerUrl,
-                    apps = AppDirectory(app)::all
+                    apps = directory::all
                 ),
-                executor = AccessibilityExecutor(service),
+                executor = AccessibilityExecutor(service, directory::all),
                 policy = SafetyPolicy(),
                 store = FileTrajectoryStore(File(app.filesDir, TRAJECTORY_FILE)),
                 guardFactory = { budget -> LoopGuard(app, budget) },

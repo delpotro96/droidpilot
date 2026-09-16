@@ -11,6 +11,7 @@ import dev.droidpilot.core.model.AgentAction
 import dev.droidpilot.core.model.Direction
 import dev.droidpilot.core.model.Executor
 import dev.droidpilot.core.model.GridPoint
+import dev.droidpilot.core.model.InstalledApp
 import dev.droidpilot.core.model.ScreenState
 import dev.droidpilot.core.model.UiElement
 import kotlinx.coroutines.CancellationException
@@ -23,7 +24,10 @@ import kotlin.coroutines.resume
 // gesture. Game screens expose no actionable nodes at all, so the gesture
 // path is the only one that reaches them
 class AccessibilityExecutor(
-    private val service: AccessibilityService
+    private val service: AccessibilityService,
+    // Only consulted when a package name does not resolve, so a run that never
+    // opens anything never walks the installed list
+    private val apps: () -> List<InstalledApp> = ::emptyList
 ) : Executor {
 
     override suspend fun perform(action: AgentAction, state: ScreenState): Result<Unit> = try {
@@ -158,12 +162,25 @@ class AccessibilityExecutor(
     // starting nothing would leave the run staring at the same screen and
     // calling it a success. The failure has to be loud enough to plan around
     private fun launch(packageName: String) {
-        val intent = service.packageManager.getLaunchIntentForPackage(packageName)
+        val resolved = resolve(packageName)
+        val intent = service.packageManager.getLaunchIntentForPackage(resolved)
             ?: error("no app called " + packageName + " on this phone")
 
         // Started from a service, so there is no task to join
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         service.startActivity(intent)
+    }
+
+    // A small model copying a long package name out of a list drops the tail
+    // of it: com.sec.android.app.clock for com.sec.android.app.clockpackage.
+    // Nothing is guessed here - the answer has to be one installed app and no
+    // other, so a prefix shared by two of them is still a failure
+    private fun resolve(packageName: String): String {
+        val installed = apps()
+        if (installed.any { it.packageName == packageName }) return packageName
+
+        val candidates = installed.filter { it.packageName.startsWith(packageName) }
+        return if (candidates.size == 1) candidates.first().packageName else packageName
     }
 
     private fun global(actionId: Int) {
