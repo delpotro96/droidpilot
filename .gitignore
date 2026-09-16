@@ -13,3 +13,6 @@ captures/
 *.keystore
 *.jks
 models/
+
+# Screen dumps received from the phone, local diagnostics only
+tools/dumps/
